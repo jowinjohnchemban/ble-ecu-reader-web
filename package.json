@@ -5,7 +5,11 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "serve": "python -m http.server 8080",
-    "verify": "node scripts/verify-imports.cjs"
+    "serve": "node scripts/static-server.cjs 8080",
+    "verify": "node scripts/verify-imports.cjs",
+    "audit:ui": "node scripts/ui-audit.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
   }
 }

@@ -50,6 +50,18 @@
   }
   ::-webkit-scrollbar { height: 6px; width: 8px; }
   ::-webkit-scrollbar-thumb { background: #2a3140; border-radius: 4px; }
+
+  /* Tab bar horizontal-scroll affordance: a fading edge hints "more tabs this way" instead
+     of a tab silently getting cut off mid-word with no visual cue it's scrollable. The
+     wrapping .relative div (not #tabBar itself, which is the scrolling element) is the
+     positioning context, so this overlay stays pinned to the visible edge while tabs
+     scroll underneath it. */
+  #tabBarFadeRight {
+    position: absolute; top: 0; right: 0; bottom: 1px; width: 28px;
+    background: linear-gradient(to left, #0b0d11, transparent);
+    pointer-events: none;
+    z-index: 20; /* #tabBar itself is z-10 (sticky) — this must sit above it to mask the edge */
+  }
 </style>
 </head>
 <body class="bg-bg text-slate-100 font-sans antialiased min-h-screen">
@@ -57,7 +69,7 @@
   <!-- Top bar -->
   <header id="topbar" class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-edge bg-panel/90 px-4 py-3 backdrop-blur sm:px-6">
     <h1 class="flex items-center gap-2 text-base font-semibold">
-      <span aria-hidden="true">\u{1F6E0}️</span> DIY ECU / Telematics Reader
+      <span aria-hidden="true">&#x1F6E0;&#xFE0F;</span> DIY ECU / Telematics Reader
     </h1>
     <div class="flex flex-wrap items-center gap-2">
       <span id="connStatus" class="inline-flex items-center gap-1.5 rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-err">
@@ -70,13 +82,21 @@
     </div>
   </header>
 
-  <p class="border-b border-edge bg-gradient-to-r from-amber-950/60 to-amber-900/30 px-4 py-2.5 text-xs leading-relaxed text-warn sm:px-6">
-    Read-only telemetry tool. No vehicle command (lock/unlock/immobilize/FOTA-trigger) is implemented here — by design, including in Full Scan.
-    Many decoded values are <strong>unverified best-effort guesses</strong> — calibrate against your own dash before trusting a number.
-    See <code class="rounded bg-black/30 px-1">README.md</code> and <code class="rounded bg-black/30 px-1">docs/BLE_PROTOCOL.md</code>.
-  </p>
+  <!-- Collapsed by default on mobile (pure-CSS checkbox toggle, no JS) to avoid eating a
+       third of a phone screen with a disclaimer; always expanded on sm+ (640px) where
+       there's room to just show it — the checkbox is irrelevant and hidden at that width. -->
+  <div class="border-b border-edge bg-gradient-to-r from-amber-950/60 to-amber-900/30 px-4 py-2 text-warn sm:px-6 sm:py-2.5">
+    <input type="checkbox" id="warningToggle" class="peer hidden" />
+    <label for="warningToggle" class="block cursor-pointer text-xs font-medium sm:hidden peer-checked:hidden">&#x26A0;&#xFE0F; Read-only tool, unverified data — tap for details</label>
+    <p class="hidden text-xs leading-relaxed peer-checked:block sm:block">
+      Read-only telemetry tool. No vehicle command (lock/unlock/immobilize/FOTA-trigger) is implemented here — by design, including in Full Scan.
+      Many decoded values are <strong>unverified best-effort guesses</strong> — calibrate against your own dash before trusting a number.
+      See <code class="rounded bg-black/30 px-1">README.md</code> and <code class="rounded bg-black/30 px-1">docs/BLE_PROTOCOL.md</code>. <label for="warningToggle" class="cursor-pointer underline sm:hidden">(collapse)</label>
+    </p>
+  </div>
 
   <!-- Tabs -->
+  <div class="relative">
   <nav id="tabBar" class="sticky top-[61px] z-10 flex gap-1 overflow-x-auto border-b border-edge bg-bg px-2 sm:px-4">
     <button class="tab-btn whitespace-nowrap border-b-2 border-accent px-4 py-3 text-sm font-medium text-accent" data-tab="dashboard">Dashboard</button>
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="gauges">Gauges</button>
@@ -91,6 +111,8 @@
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="fieldmap">Field Map Editor</button>
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="settings">Settings</button>
   </nav>
+  <div id="tabBarFadeRight" aria-hidden="true"></div>
+  </div>
 
   <main class="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:pb-6">
 
@@ -109,7 +131,7 @@
       <p class="mb-3 text-sm text-slate-400">
         Speedometer-style dials for bounded sensor fields (speed, RPM, engine temp, throttle, fuel, battery). Color zones are
         reasonable defaults for a typical commuter motorcycle, <strong class="text-slate-200">not</strong> a certified warning
-        system for your specific bike — see <code class="rounded bg-black/30 px-1">js/gauges.js</code> to tune them.
+        system for your specific bike — see <code class="rounded bg-black/30 px-1">js/core/GaugeRenderer.js</code> to tune them.
       </p>
       <div id="gaugesGrid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
     </section>
@@ -137,7 +159,7 @@
     <section id="tab-vehicle" class="tab-panel hidden space-y-8">
       <div>
         <h2 class="mb-1 text-sm font-semibold text-slate-200">Vehicle &amp; Dongle Info</h2>
-        <p class="mb-3 text-sm text-slate-400">On-demand register reads via the VarEx command channel. Experimental — see code comments in <code class="rounded bg-black/30 px-1">js/ble.js</code>.</p>
+        <p class="mb-3 text-sm text-slate-400">On-demand register reads via the VarEx command channel. Experimental — see code comments in <code class="rounded bg-black/30 px-1">js/core/BleConnection.js</code>.</p>
         <div class="mb-3 flex flex-wrap gap-2">
           <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="CARDATA" data-output="registerOutput" disabled>Read VIN (CARDATA)</button>
           <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="SN" data-output="registerOutput" disabled>Read Serial Number</button>
@@ -320,16 +342,16 @@
   <!-- Mobile bottom quick-nav: thumb-reachable access to the 4 real-time views. Hidden on sm+ where the top tab bar is already reachable. -->
   <nav class="fixed inset-x-0 bottom-0 z-30 flex justify-around border-t border-edge bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
     <button class="tab-btn-mobile flex flex-1 flex-col items-center gap-0.5 py-2.5 text-accent" data-tab="dashboard">
-      <span class="text-lg" aria-hidden="true">\u{1F4CA}</span><span class="text-[11px] font-medium">Dashboard</span>
+      <span class="text-lg" aria-hidden="true">&#x1F4CA;</span><span class="text-[11px] font-medium">Dashboard</span>
     </button>
     <button class="tab-btn-mobile flex flex-1 flex-col items-center gap-0.5 py-2.5 text-slate-500" data-tab="gauges">
-      <span class="text-lg" aria-hidden="true">\u{1F9ED}</span><span class="text-[11px] font-medium">Gauges</span>
+      <span class="text-lg" aria-hidden="true">&#x1F9ED;</span><span class="text-[11px] font-medium">Gauges</span>
     </button>
     <button class="tab-btn-mobile flex flex-1 flex-col items-center gap-0.5 py-2.5 text-slate-500" data-tab="alerts">
       <span class="text-lg" aria-hidden="true">⚠️</span><span class="text-[11px] font-medium">Alerts</span>
     </button>
     <button class="tab-btn-mobile flex flex-1 flex-col items-center gap-0.5 py-2.5 text-slate-500" data-tab="history">
-      <span class="text-lg" aria-hidden="true">\u{1F4C8}</span><span class="text-[11px] font-medium">History</span>
+      <span class="text-lg" aria-hidden="true">&#x1F4C8;</span><span class="text-[11px] font-medium">History</span>
     </button>
   </nav>
 
