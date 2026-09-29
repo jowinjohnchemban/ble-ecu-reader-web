@@ -39,12 +39,18 @@ Then open `http://localhost:8080` in Chrome/Edge.
 
 ## Using it
 
-1. Click **Connect to Bike**, pick your dongle from the browser's device picker.
-2. The **Dashboard** tab starts filling in as telemetry notifications arrive.
-3. The **Alerts** tab shows every boolean fault/alert flag (side-stand, roll-over, theft, panic, accident, fall-down, speeding, fuel-theft, battery-removal), lit up red when active.
-4. The **Registers** tab lets you request VIN/serial/firmware version on demand — this path is more experimental than the notify-based dashboard (see code comments in `js/ble.js`); if it times out, that's expected until the exact opcode is confirmed against your dongle.
-5. The **Raw Frames** tab is the ground truth: every notification, its checksum status, and hex bytes, exportable as JSON/CSV for offline analysis (Excel, Python/pandas, etc.) — this is the most reliable diagnostic tool here, and the best way to correlate a specific byte with a specific real-world event (rev the engine and watch which bytes move).
-6. The **Field Map Editor** lets you tweak byte/bit offsets live (persisted to your browser's `localStorage`) if a decoded value doesn't match reality.
+1. Click **Connect to Bike**, pick your dongle from the browser's device picker. Use **Reconnect** afterwards to relink without re-picking it (works until the browser tab closes).
+2. **Dashboard** — live telemetry, with gauge bars on percentage fields (battery/fuel/throttle). Toggle units (metric/imperial) in **Settings**.
+3. **Alerts** — every boolean fault/alert flag (side-stand, roll-over, theft, panic, accident, fall-down, speeding, fuel-theft, battery-removal), lit up red when active. Enable "alert sound" in **Settings** to get an audible beep the moment one flips on.
+4. **History** — pick any numeric field from the dropdown for a live trend chart of this session's readings, exportable as CSV.
+5. **Vehicle Info** — on-demand reads of VIN, serial number, firmware version, dongle MAC, and registration status via the VarEx command channel. More experimental than the notify-based dashboard (see code comments in `js/ble.js`); a timeout is expected until the exact opcode is confirmed against your dongle.
+6. **Logs** — trip-log/stat-log first-index and count registers, plus a full paged dump (with a progress bar) of the large `TRACKLOG_PTR`/`statlog_PTR` regions for offline analysis — the record layout inside them isn't documented, so this hands you the raw bytes to work out yourself (diff dumps across rides to spot patterns).
+7. **FOTA Status** — read-only firmware/FOTA status fields. There's deliberately no button to trigger a FOTA update.
+8. **Raw Frames** — the ground truth: every notification, its checksum status, and hex bytes, exportable as JSON/CSV — the most reliable diagnostic tool here, and the best way to correlate a specific byte with a specific real-world event (rev the engine and watch which bytes move).
+9. **Field Map Editor** — tweak byte/bit offsets live (persisted to `localStorage`) if a decoded value doesn't match reality.
+10. **Settings** — units, alert sound, and auto-reconnect (automatically retries `Reconnect` after an unexpected disconnect).
+
+The app is also installable as a PWA (look for the install icon in Chrome's address bar) — the UI shell loads instantly/offline via a service worker; Bluetooth itself obviously still needs to be in range of your bike.
 
 ## Troubleshooting: bike doesn't show up in the device picker
 
