@@ -26,11 +26,12 @@ GitHub Pages serves over HTTPS, which satisfies Web Bluetooth's secure-context r
 
 ### Option B — Run locally
 
-From this folder:
+Any static file server works. This repo ships a zero-dependency one:
 
 ```bash
-# any static file server works; Python's is built-in on most systems
-python -m http.server 8080
+node scripts/static-server.cjs 8080
+# or, if you've run `pnpm install` for the dev tooling below:
+pnpm run serve
 ```
 
 Then open `http://localhost:8080` in Chrome/Edge.
@@ -143,6 +144,21 @@ js/components/          — one class per tab/panel (see Architecture above)
 
 js/main.js               — composition root: wires AppState + BleConnection to every component
 ```
+
+## Development tooling
+
+The app itself has zero runtime dependencies — this is only needed if you're changing the code, not to use the tool.
+
+```bash
+pnpm install          # installs Playwright, the one dev dependency (use pnpm, not npm — see package.json)
+pnpm run verify        # static check that every import resolves to a real export
+pnpm run audit:ui       # Playwright: loads the app at 5 device viewports, checks for console
+                        # errors/horizontal overflow/broken tab switching, saves a screenshot
+                        # per viewport to scripts/audit-screenshots/ (gitignored) for visual review
+pnpm run serve         # the zero-dependency static server, for manual testing against real hardware
+```
+
+`audit:ui` doesn't touch Web Bluetooth (headless Chromium has no BLE radio, and `requestDevice()` would just hang waiting on a picker nothing can answer) — it audits layout and navigation, not the hardware path. Use `pnpm run serve` plus a real browser near your bike for that.
 
 ## Extending this
 
