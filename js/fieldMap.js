@@ -112,13 +112,31 @@ const FIELD_MAP = {
 // notify characteristics. See js/varex.js. Read-only tags only — no command/write tags
 // (REGPROC_W, cmmdFota, RemoteAction) are implemented in this tool by design.
 const REGISTER_MAP = {
-  CARDATA: { address: 0x287c, length: 22 },
-  SN: { address: 0x2ac4, length: 8 },
-  FW_VER: { address: 0x2acc, length: 2 },
-  TRACKLOG_N: { address: 0x2ab8, length: 1 },
-  TRACKLOG_0: { address: 0x2ab9, length: 1 },
-  statlog_N: { address: 0x2ad6, length: 1 },
-  statlog_0: { address: 0x2ad7, length: 1 },
+  CARDATA: { address: 0x287c, length: 22, group: "vehicle" },
+  SN: { address: 0x2ac4, length: 8, group: "vehicle" },
+  FW_VER: { address: 0x2acc, length: 2, group: "vehicle" },
+  MGD_MAC: { address: 0x237a, length: 7, group: "vehicle" },
+  REGPROC_R: { address: 0x2ab4, length: 2, group: "vehicle" },
+
+  TRACKLOG_0: { address: 0x2ab9, length: 1, group: "logs" },
+  TRACKLOG_N: { address: 0x2ab8, length: 1, group: "logs" },
+  TRACKLOG_00: { address: 0x2267, length: 1, group: "logs" },
+  TRACKLOG_PTR: { address: 0x10800, length: 1000, group: "logs", paged: true },
+  statlog_0: { address: 0x2ad7, length: 1, group: "logs" },
+  statlog_N: { address: 0x2ad6, length: 1, group: "logs" },
+  statlog_00: { address: 0x2269, length: 1, group: "logs" },
+  statlog_PTR: { address: 0x30800, length: 1000, group: "logs", paged: true },
+
+  // Read-only FOTA status fields. cmmdFota (the trigger) is deliberately NOT included —
+  // see docs/skill/10-diy-ecu-reader-blueprint.md and docs/research/BLE_SECURITY_FINDINGS.md
+  // for why this tool never writes to the command channel.
+  fotaResult: { address: 0x2adc, length: 1, group: "fota" },
+  fotaState: { address: 0x3e32, length: 1, group: "fota" },
+  fotaImgA: { address: 0x2ade, length: 2, group: "fota" },
+  fotaImgB: { address: 0x2ae0, length: 2, group: "fota" },
+  fotaNewFW: { address: 0x2272, length: 2, group: "fota" },
+  phoneState: { address: 0x2aef, length: 1, group: "fota" },
+  NotifEnable: { address: 0x2276, length: 1, group: "fota" },
 };
 
 if (typeof module !== "undefined") module.exports = { FIELD_MAP, REGISTER_MAP };

@@ -3,8 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0f1216" />
 <title>DIY ECU Reader — Vehicle BLE Telemetry</title>
 <link rel="stylesheet" href="css/style.css" />
+<link rel="manifest" href="manifest.webmanifest" />
 </head>
 <body>
   <header class="topbar">
@@ -13,12 +15,13 @@
       <span id="connStatus" class="status status-disconnected">Disconnected</span>
       <button id="connectBtn">Connect to Bike</button>
       <button id="debugScanBtn" class="secondary" title="Shows every nearby BLE device by name, bypassing the service-UUID filter — use this if 'Connect to Bike' shows an empty list">Scan All (debug)</button>
+      <button id="reconnectBtn" class="secondary" disabled title="Reconnect to the last device without re-picking it">Reconnect</button>
       <button id="disconnectBtn" disabled>Disconnect</button>
     </div>
   </header>
 
   <p class="warning-banner">
-    Read-only telemetry tool. No vehicle command (lock/unlock/immobilize/FOTA) is implemented here — by design.
+    Read-only telemetry tool. No vehicle command (lock/unlock/immobilize/FOTA-trigger) is implemented here — by design.
     Many decoded values are <strong>unverified best-effort guesses</strong> — calibrate against your own dash
     before trusting a number. See <code>README.md</code> and <code>docs/BLE_PROTOCOL.md</code>.
   </p>
@@ -26,9 +29,13 @@
   <nav class="tabs">
     <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
     <button class="tab-btn" data-tab="alerts">Alerts</button>
-    <button class="tab-btn" data-tab="registers">Registers (VIN/SN/FW)</button>
+    <button class="tab-btn" data-tab="history">History</button>
+    <button class="tab-btn" data-tab="vehicle">Vehicle Info</button>
+    <button class="tab-btn" data-tab="logs">Logs</button>
+    <button class="tab-btn" data-tab="fota">FOTA Status</button>
     <button class="tab-btn" data-tab="raw">Raw Frames</button>
     <button class="tab-btn" data-tab="fieldmap">Field Map Editor</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
   </nav>
 
   <main>
@@ -45,14 +52,61 @@
       <div class="grid" id="alertsGrid"></div>
     </section>
 
-    <section id="tab-registers" class="tab-panel">
+    <section id="tab-history" class="tab-panel">
+      <p>Trend line for one numeric field at a time, built from frames received this session (not persisted across reloads).</p>
+      <div class="history-controls">
+        <label for="historyFieldSelect">Field:</label>
+        <select id="historyFieldSelect"></select>
+        <button id="clearHistoryBtn">Clear history</button>
+        <button id="exportHistoryBtn">Export CSV</button>
+      </div>
+      <canvas id="historyCanvas" width="900" height="320"></canvas>
+    </section>
+
+    <section id="tab-vehicle" class="tab-panel">
       <p>On-demand register reads via the VarEx command channel. Experimental — see code comments in <code>js/ble.js</code>.</p>
       <div class="register-controls">
-        <button id="readVinBtn" disabled>Read VIN (CARDATA)</button>
-        <button id="readSnBtn" disabled>Read Serial Number</button>
-        <button id="readFwBtn" disabled>Read Firmware Version</button>
+        <button class="reg-btn" data-reg="CARDATA" data-output="registerOutput" disabled>Read VIN (CARDATA)</button>
+        <button class="reg-btn" data-reg="SN" data-output="registerOutput" disabled>Read Serial Number</button>
+        <button class="reg-btn" data-reg="FW_VER" data-output="registerOutput" disabled>Read Firmware Version</button>
+        <button class="reg-btn" data-reg="MGD_MAC" data-output="registerOutput" disabled>Read Dongle MAC</button>
+        <button class="reg-btn" data-reg="REGPROC_R" data-output="registerOutput" disabled>Read Registration Status</button>
       </div>
       <pre id="registerOutput">—</pre>
+    </section>
+
+    <section id="tab-logs" class="tab-panel">
+      <p>
+        Trip log and stat log pointers/counters, plus a raw paged dump of the large log regions. Record layout
+        inside <code>TRACKLOG_PTR</code>/<code>statlog_PTR</code> isn't documented — this surfaces raw bytes for
+        your own analysis (export and diff across rides to spot patterns).
+      </p>
+      <div class="register-controls">
+        <button class="reg-btn" data-reg="TRACKLOG_0" data-output="logsOutput" disabled>Trip Log: first index</button>
+        <button class="reg-btn" data-reg="TRACKLOG_N" data-output="logsOutput" disabled>Trip Log: count</button>
+        <button class="reg-btn" data-reg="TRACKLOG_00" data-output="logsOutput" disabled>Trip Log: page 0</button>
+        <button class="reg-btn" data-reg="statlog_0" data-output="logsOutput" disabled>Stat Log: first index</button>
+        <button class="reg-btn" data-reg="statlog_N" data-output="logsOutput" disabled>Stat Log: count</button>
+        <button class="reg-btn" data-reg="statlog_00" data-output="logsOutput" disabled>Stat Log: page 0</button>
+      </div>
+      <div class="register-controls">
+        <button id="readTrackLogPtrBtn" disabled>Dump Trip Log (1000 bytes, paged)</button>
+        <button id="readStatLogPtrBtn" disabled>Dump Stat Log (1000 bytes, paged)</button>
+        <progress id="pagedReadProgress" value="0" max="1000" style="display:none"></progress>
+      </div>
+      <pre id="logsOutput">—</pre>
+    </section>
+
+    <section id="tab-fota" class="tab-panel">
+      <p>
+        <strong>Read-only.</strong> Shows firmware/FOTA status fields. There is no button here to trigger a FOTA
+        update (<code>cmmdFota</code>) — see <code>docs/research/BLE_SECURITY_FINDINGS.md</code> for why this tool
+        never writes to the command channel.
+      </p>
+      <div class="register-controls">
+        <button id="readFotaStatusBtn" disabled>Read FOTA Status</button>
+      </div>
+      <pre id="fotaOutput">—</pre>
     </section>
 
     <section id="tab-raw" class="tab-panel">
@@ -77,12 +131,36 @@
       </div>
       <textarea id="fieldMapEditor" spellcheck="false"></textarea>
     </section>
+
+    <section id="tab-settings" class="tab-panel">
+      <div class="settings-list">
+        <label class="settings-row">
+          <span>Units</span>
+          <select id="unitsSelect">
+            <option value="metric">Metric (km, km/h, °C)</option>
+            <option value="imperial">Imperial (mi, mph, °F)</option>
+          </select>
+        </label>
+        <label class="settings-row">
+          <input type="checkbox" id="alertSoundToggle" />
+          <span>Play a sound when a new alert becomes active</span>
+        </label>
+        <label class="settings-row">
+          <input type="checkbox" id="autoReconnectToggle" />
+          <span>Attempt automatic reconnect on unexpected disconnect</span>
+        </label>
+      </div>
+      <p class="muted">Settings persist to <code>localStorage</code> for this browser only.</p>
+    </section>
   </main>
+
+  <div id="toastContainer" aria-live="polite"></div>
 
   <script src="js/fieldMap.js"></script>
   <script src="js/bitUtils.js"></script>
   <script src="js/decoder.js"></script>
   <script src="js/ble.js"></script>
+  <script src="js/history.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

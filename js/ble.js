@@ -91,6 +91,21 @@ class VehicleBleConnection {
     return this.device;
   }
 
+  // Re-establishes the GATT connection to the same device without a new device picker —
+  // the browser retains permission for a device once granted (for this origin/session).
+  // Useful after the dongle drops the link (out of range, sleep, or the OEM app grabbing
+  // it back) without having to re-pick it from a list every time.
+  async reconnect() {
+    if (!this.device) throw new Error("No previously connected device to reconnect to.");
+    this._setState("connecting");
+    this.server = await this.device.gatt.connect();
+    this.service = await this.server.getPrimaryService(uuidFor(CHAR_CODES.service));
+    await this._subscribeTelemetry();
+    await this._subscribeVarExAck();
+    this._setState("connected", { name: this.device.name });
+    return this.device;
+  }
+
   disconnect() {
     if (this.device?.gatt?.connected) this.device.gatt.disconnect();
   }
@@ -151,6 +166,25 @@ class VehicleBleConnection {
 
     await writeChar.writeValueWithResponse(frame);
     return ackPromise;
+  }
+
+  // For the large paged regions (TRACKLOG_PTR / statlog_PTR, up to 1000 bytes) — reads in
+  // fixed-size chunks, incrementing the address each time, and concatenates the results.
+  // The real chunking/pagination scheme used by the dongle firmware isn't confirmed (see
+  // docs/BLE_PROTOCOL.md) — this is a reasonable guess (16 bytes/read, matching the VarEx
+  // frame payload size) for exploration purposes. onProgress(bytesRead, totalBytes) is
+  // optional, for a progress bar on a 1000-byte pull.
+  async readRegisterPaged(address, totalLength, { chunkSize = 16, onProgress, opcode = 0x01 } = {}) {
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    while (offset < totalLength) {
+      const len = Math.min(chunkSize, totalLength - offset);
+      const chunk = await this.readRegister(address + offset, len, { opcode });
+      result.set(chunk.slice(0, len), offset);
+      offset += len;
+      if (onProgress) onProgress(offset, totalLength);
+    }
+    return result;
   }
 }
 
