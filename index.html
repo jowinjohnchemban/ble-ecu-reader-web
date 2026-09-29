@@ -1,160 +1,288 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="theme-color" content="#0f1216" />
+<meta name="theme-color" content="#0b0d11" />
 <title>DIY ECU Reader — Vehicle BLE Telemetry</title>
-<link rel="stylesheet" href="css/style.css" />
 <link rel="manifest" href="manifest.webmanifest" />
+
+<!--
+  Tailwind CSS (Play CDN — no build step, matches this project's "no npm required" design).
+  For a production deployment you'd normally compile Tailwind via its CLI/PostCSS instead
+  of the runtime CDN build; see README's "About the stack" section.
+-->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          bg: "#0b0d11",
+          panel: "#171c24",
+          panel2: "#1e2530",
+          edge: "#2a3140",
+          accent: "#3fa9f5",
+          ok: "#2fbf71",
+          warn: "#f5a623",
+          err: "#e5484d",
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Chart.js for the History tab's trend charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<style>
+  /* The handful of things Tailwind's utility set doesn't give us out of the box. */
+  @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(20px); } }
+  @keyframes alertFlash { 0%, 100% { box-shadow: 0 0 0 rgba(229,72,77,0); } 50% { box-shadow: 0 0 16px rgba(229,72,77,0.35); } }
+  .toast-in { animation: toastIn 0.2s ease; }
+  .toast-out { animation: toastOut 0.2s ease forwards; }
+  .alert-flash { animation: alertFlash 1.4s ease-in-out infinite; }
+  .raw-log:empty::before {
+    content: "No frames yet — connect to your bike and this fills up live.";
+    display: block; padding: 20px; color: #8b93a3;
+  }
+  ::-webkit-scrollbar { height: 6px; width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #2a3140; border-radius: 4px; }
+</style>
 </head>
-<body>
-  <header class="topbar">
-    <h1>DIY ECU / Telematics Reader</h1>
-    <div class="conn-controls">
-      <span id="connStatus" class="status status-disconnected">Disconnected</span>
-      <button id="connectBtn">Connect to Bike</button>
-      <button id="debugScanBtn" class="secondary" title="Shows every nearby BLE device by name, bypassing the service-UUID filter — use this if 'Connect to Bike' shows an empty list">Scan All (debug)</button>
-      <button id="reconnectBtn" class="secondary" disabled title="Reconnect to the last device without re-picking it">Reconnect</button>
-      <button id="disconnectBtn" disabled>Disconnect</button>
+<body class="bg-bg text-slate-100 font-sans antialiased min-h-screen">
+
+  <!-- Top bar -->
+  <header class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-edge bg-panel/90 px-4 py-3 backdrop-blur sm:px-6">
+    <h1 class="flex items-center gap-2 text-base font-semibold">
+      <span aria-hidden="true">\u{1F6E0}️</span> DIY ECU / Telematics Reader
+    </h1>
+    <div class="flex flex-wrap items-center gap-2">
+      <span id="connStatus" class="inline-flex items-center gap-1.5 rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-err">
+        <span class="h-1.5 w-1.5 rounded-full bg-current"></span> Disconnected
+      </span>
+      <button id="connectBtn" class="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 shadow-sm transition hover:brightness-110 active:scale-95 disabled:opacity-30">Connect to Bike</button>
+      <button id="debugScanBtn" title="Shows every nearby BLE device by name, bypassing the service-UUID filter — use this if 'Connect to Bike' shows an empty list" class="rounded-lg border border-accent/40 px-4 py-2 text-sm font-semibold text-accent transition hover:bg-accent/10 disabled:opacity-30">Scan All (debug)</button>
+      <button id="reconnectBtn" disabled title="Reconnect to the last device without re-picking it" class="rounded-lg border border-accent/40 px-4 py-2 text-sm font-semibold text-accent transition hover:bg-accent/10 disabled:opacity-30">Reconnect</button>
+      <button id="disconnectBtn" disabled class="rounded-lg border border-red-900 px-4 py-2 text-sm font-semibold text-err transition hover:bg-red-950 disabled:opacity-30">Disconnect</button>
     </div>
   </header>
 
-  <p class="warning-banner">
-    Read-only telemetry tool. No vehicle command (lock/unlock/immobilize/FOTA-trigger) is implemented here — by design.
-    Many decoded values are <strong>unverified best-effort guesses</strong> — calibrate against your own dash
-    before trusting a number. See <code>README.md</code> and <code>docs/BLE_PROTOCOL.md</code>.
+  <p class="border-b border-edge bg-gradient-to-r from-amber-950/60 to-amber-900/30 px-4 py-2.5 text-xs leading-relaxed text-warn sm:px-6">
+    Read-only telemetry tool. No vehicle command (lock/unlock/immobilize/FOTA-trigger) is implemented here — by design, including in Full Scan.
+    Many decoded values are <strong>unverified best-effort guesses</strong> — calibrate against your own dash before trusting a number.
+    See <code class="rounded bg-black/30 px-1">README.md</code> and <code class="rounded bg-black/30 px-1">docs/BLE_PROTOCOL.md</code>.
   </p>
 
-  <nav class="tabs">
-    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-    <button class="tab-btn" data-tab="alerts">Alerts</button>
-    <button class="tab-btn" data-tab="history">History</button>
-    <button class="tab-btn" data-tab="vehicle">Vehicle Info</button>
-    <button class="tab-btn" data-tab="logs">Logs</button>
-    <button class="tab-btn" data-tab="fota">FOTA Status</button>
-    <button class="tab-btn" data-tab="raw">Raw Frames</button>
-    <button class="tab-btn" data-tab="fieldmap">Field Map Editor</button>
-    <button class="tab-btn" data-tab="settings">Settings</button>
+  <!-- Tabs -->
+  <nav id="tabBar" class="sticky top-[61px] z-10 flex gap-1 overflow-x-auto border-b border-edge bg-bg px-2 sm:px-4">
+    <button class="tab-btn whitespace-nowrap border-b-2 border-accent px-4 py-3 text-sm font-medium text-accent" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="alerts">Alerts</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="history">History</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="vehicle">Vehicle Info</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="logs">Logs</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="fota">FOTA Status</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="fullscan">Full Scan</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="raw">Raw Frames</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="fieldmap">Field Map Editor</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="settings">Settings</button>
   </nav>
 
-  <main>
-    <section id="tab-dashboard" class="tab-panel active">
-      <div class="grid" id="dashboardGrid"></div>
-      <div class="gps-card">
-        <h3>GPS</h3>
-        <div id="gpsValue">—</div>
-        <a id="gpsMapLink" href="#" target="_blank" rel="noopener">Open in Maps</a>
+  <main class="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+
+    <!-- Dashboard -->
+    <section id="tab-dashboard" class="tab-panel">
+      <div id="dashboardGrid" class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"></div>
+      <div class="mt-5 max-w-xs rounded-xl border border-edge bg-gradient-to-br from-panel2 to-panel p-4">
+        <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">GPS</h3>
+        <div id="gpsValue" class="mb-2 font-mono text-lg tabular-nums">—</div>
+        <a id="gpsMapLink" href="#" target="_blank" rel="noopener" class="text-sm font-semibold text-accent hover:underline">Open in Maps</a>
       </div>
     </section>
 
-    <section id="tab-alerts" class="tab-panel">
-      <div class="grid" id="alertsGrid"></div>
+    <!-- Alerts -->
+    <section id="tab-alerts" class="tab-panel hidden">
+      <div id="alertsGrid" class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"></div>
     </section>
 
-    <section id="tab-history" class="tab-panel">
-      <p>Trend line for one numeric field at a time, built from frames received this session (not persisted across reloads).</p>
-      <div class="history-controls">
-        <label for="historyFieldSelect">Field:</label>
-        <select id="historyFieldSelect"></select>
-        <button id="clearHistoryBtn">Clear history</button>
-        <button id="exportHistoryBtn">Export CSV</button>
+    <!-- History -->
+    <section id="tab-history" class="tab-panel hidden">
+      <p class="mb-3 text-sm text-slate-400">Trend lines for numeric fields, built from frames received this session (not persisted across reloads). Select multiple fields to overlay.</p>
+      <div class="mb-3 flex flex-wrap items-center gap-3">
+        <select id="historyFieldSelect" multiple size="4" class="rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm"></select>
+        <button id="clearHistoryBtn" class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Clear history</button>
+        <button id="exportHistoryBtn" class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Export CSV</button>
+        <span class="text-xs text-slate-500">Ctrl/Cmd-click to select multiple fields</span>
       </div>
-      <canvas id="historyCanvas" width="900" height="320"></canvas>
-    </section>
-
-    <section id="tab-vehicle" class="tab-panel">
-      <p>On-demand register reads via the VarEx command channel. Experimental — see code comments in <code>js/ble.js</code>.</p>
-      <div class="register-controls">
-        <button class="reg-btn" data-reg="CARDATA" data-output="registerOutput" disabled>Read VIN (CARDATA)</button>
-        <button class="reg-btn" data-reg="SN" data-output="registerOutput" disabled>Read Serial Number</button>
-        <button class="reg-btn" data-reg="FW_VER" data-output="registerOutput" disabled>Read Firmware Version</button>
-        <button class="reg-btn" data-reg="MGD_MAC" data-output="registerOutput" disabled>Read Dongle MAC</button>
-        <button class="reg-btn" data-reg="REGPROC_R" data-output="registerOutput" disabled>Read Registration Status</button>
+      <div class="rounded-xl border border-edge bg-panel p-3">
+        <canvas id="historyCanvas" height="110"></canvas>
       </div>
-      <pre id="registerOutput">—</pre>
     </section>
 
-    <section id="tab-logs" class="tab-panel">
-      <p>
+    <!-- Vehicle Info -->
+    <section id="tab-vehicle" class="tab-panel hidden space-y-8">
+      <div>
+        <h2 class="mb-1 text-sm font-semibold text-slate-200">Vehicle &amp; Dongle Info</h2>
+        <p class="mb-3 text-sm text-slate-400">On-demand register reads via the VarEx command channel. Experimental — see code comments in <code class="rounded bg-black/30 px-1">js/ble.js</code>.</p>
+        <div class="mb-3 flex flex-wrap gap-2">
+          <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="CARDATA" data-output="registerOutput" disabled>Read VIN (CARDATA)</button>
+          <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="SN" data-output="registerOutput" disabled>Read Serial Number</button>
+          <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="FW_VER" data-output="registerOutput" disabled>Read Firmware Version</button>
+          <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="MGD_MAC" data-output="registerOutput" disabled>Read Dongle MAC</button>
+          <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="REGPROC_R" data-output="registerOutput" disabled>Read Registration Status</button>
+        </div>
+        <pre id="registerOutput" class="min-h-[60px] whitespace-pre-wrap rounded-xl border border-edge bg-panel p-3 font-mono text-sm leading-relaxed">—</pre>
+      </div>
+
+      <div>
+        <h2 class="mb-1 text-sm font-semibold text-slate-200">Security / Handshake fields <span class="rounded bg-amber-900/50 px-2 py-0.5 text-xs font-normal text-warn">experimental</span></h2>
+        <p class="mb-3 text-sm text-slate-400">Shape and purpose of these fields weren't confirmed from decompilation (see <code class="rounded bg-black/30 px-1">docs/BLE_PROTOCOL.md</code> §4). Reading them is passive/non-destructive — results are just raw bytes to inspect.</p>
+        <div class="mb-3 flex flex-wrap gap-2">
+          <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="autenticate01" data-output="securityOutput" disabled>Read autenticate01</button>
+          <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="autenticate02" data-output="securityOutput" disabled>Read autenticate02</button>
+          <button id="readSmCertBtn" disabled class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30">Read SMCERT (509 bytes, paged)</button>
+        </div>
+        <pre id="securityOutput" class="min-h-[60px] whitespace-pre-wrap rounded-xl border border-edge bg-panel p-3 font-mono text-sm leading-relaxed">—</pre>
+      </div>
+
+      <div>
+        <h2 class="mb-1 text-sm font-semibold text-slate-200">Write-targeted registers <span class="rounded bg-red-900/50 px-2 py-0.5 text-xs font-normal text-err">handle with care</span></h2>
+        <p class="mb-3 text-sm text-slate-400">
+          In the OEM app these addresses are where <em>commands</em> get written (registration, FOTA trigger, phone control). This tool only ever sends a <strong>read</strong> opcode to them — never a write — but we can't guarantee every dongle firmware treats an unexpected read as side-effect-free. Read one at a time and watch the Raw Frames tab if you try these. Excluded from Full Scan by default.
+        </p>
+        <div class="mb-3 flex flex-wrap gap-2">
+          <button class="reg-btn rounded-lg border border-red-900 px-3 py-1.5 text-sm font-medium text-red-200 hover:bg-red-950 disabled:opacity-30" data-reg="REGPROC_W" data-output="cautionOutput" disabled>Read REGPROC_W (read-only)</button>
+          <button class="reg-btn rounded-lg border border-red-900 px-3 py-1.5 text-sm font-medium text-red-200 hover:bg-red-950 disabled:opacity-30" data-reg="cmmdFota" data-output="cautionOutput" disabled>Read cmmdFota (read-only)</button>
+          <button class="reg-btn rounded-lg border border-red-900 px-3 py-1.5 text-sm font-medium text-red-200 hover:bg-red-950 disabled:opacity-30" data-reg="phoneControl" data-output="cautionOutput" disabled>Read phoneControl (read-only)</button>
+        </div>
+        <pre id="cautionOutput" class="min-h-[60px] whitespace-pre-wrap rounded-xl border border-edge bg-panel p-3 font-mono text-sm leading-relaxed">—</pre>
+      </div>
+    </section>
+
+    <!-- Logs -->
+    <section id="tab-logs" class="tab-panel hidden">
+      <p class="mb-3 text-sm text-slate-400">
         Trip log and stat log pointers/counters, plus a raw paged dump of the large log regions. Record layout
-        inside <code>TRACKLOG_PTR</code>/<code>statlog_PTR</code> isn't documented — this surfaces raw bytes for
+        inside <code class="rounded bg-black/30 px-1">TRACKLOG_PTR</code>/<code class="rounded bg-black/30 px-1">statlog_PTR</code> isn't documented — this surfaces raw bytes for
         your own analysis (export and diff across rides to spot patterns).
       </p>
-      <div class="register-controls">
-        <button class="reg-btn" data-reg="TRACKLOG_0" data-output="logsOutput" disabled>Trip Log: first index</button>
-        <button class="reg-btn" data-reg="TRACKLOG_N" data-output="logsOutput" disabled>Trip Log: count</button>
-        <button class="reg-btn" data-reg="TRACKLOG_00" data-output="logsOutput" disabled>Trip Log: page 0</button>
-        <button class="reg-btn" data-reg="statlog_0" data-output="logsOutput" disabled>Stat Log: first index</button>
-        <button class="reg-btn" data-reg="statlog_N" data-output="logsOutput" disabled>Stat Log: count</button>
-        <button class="reg-btn" data-reg="statlog_00" data-output="logsOutput" disabled>Stat Log: page 0</button>
+      <div class="mb-3 flex flex-wrap gap-2">
+        <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="TRACKLOG_0" data-output="logsOutput" disabled>Trip Log: first index</button>
+        <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="TRACKLOG_N" data-output="logsOutput" disabled>Trip Log: count</button>
+        <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="TRACKLOG_00" data-output="logsOutput" disabled>Trip Log: page 0</button>
+        <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="statlog_0" data-output="logsOutput" disabled>Stat Log: first index</button>
+        <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="statlog_N" data-output="logsOutput" disabled>Stat Log: count</button>
+        <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="statlog_00" data-output="logsOutput" disabled>Stat Log: page 0</button>
       </div>
-      <div class="register-controls">
-        <button id="readTrackLogPtrBtn" disabled>Dump Trip Log (1000 bytes, paged)</button>
-        <button id="readStatLogPtrBtn" disabled>Dump Stat Log (1000 bytes, paged)</button>
-        <progress id="pagedReadProgress" value="0" max="1000" style="display:none"></progress>
+      <div class="mb-3 flex flex-wrap items-center gap-3">
+        <button id="readTrackLogPtrBtn" disabled class="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-slate-950 hover:brightness-110 disabled:opacity-30">Dump Trip Log (1000 bytes, paged)</button>
+        <button id="readStatLogPtrBtn" disabled class="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-slate-950 hover:brightness-110 disabled:opacity-30">Dump Stat Log (1000 bytes, paged)</button>
+        <progress id="pagedReadProgress" value="0" max="1000" class="hidden h-2 w-48 overflow-hidden rounded"></progress>
       </div>
-      <pre id="logsOutput">—</pre>
+      <pre id="logsOutput" class="min-h-[60px] whitespace-pre-wrap rounded-xl border border-edge bg-panel p-3 font-mono text-sm leading-relaxed">—</pre>
     </section>
 
-    <section id="tab-fota" class="tab-panel">
-      <p>
-        <strong>Read-only.</strong> Shows firmware/FOTA status fields. There is no button here to trigger a FOTA
-        update (<code>cmmdFota</code>) — see <code>docs/research/BLE_SECURITY_FINDINGS.md</code> for why this tool
+    <!-- FOTA Status -->
+    <section id="tab-fota" class="tab-panel hidden">
+      <p class="mb-3 text-sm text-slate-400">
+        <strong class="text-slate-200">Read-only.</strong> Shows firmware/FOTA status fields. There is no button here to trigger a FOTA
+        update (<code class="rounded bg-black/30 px-1">cmmdFota</code>) — see <code class="rounded bg-black/30 px-1">docs/research/BLE_SECURITY_FINDINGS.md</code> for why this tool
         never writes to the command channel.
       </p>
-      <div class="register-controls">
-        <button id="readFotaStatusBtn" disabled>Read FOTA Status</button>
+      <div class="mb-3">
+        <button id="readFotaStatusBtn" disabled class="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-slate-950 hover:brightness-110 disabled:opacity-30">Read FOTA Status</button>
       </div>
-      <pre id="fotaOutput">—</pre>
+      <pre id="fotaOutput" class="min-h-[60px] whitespace-pre-wrap rounded-xl border border-edge bg-panel p-3 font-mono text-sm leading-relaxed">—</pre>
     </section>
 
-    <section id="tab-raw" class="tab-panel">
-      <div class="raw-controls">
-        <label><input type="checkbox" id="pauseRaw" /> Pause log</label>
-        <button id="clearRawBtn">Clear</button>
-        <button id="exportJsonBtn">Export JSON</button>
-        <button id="exportCsvBtn">Export CSV</button>
-        <span id="frameCount">0 frames</span>
-      </div>
-      <div id="rawLog" class="raw-log"></div>
-    </section>
-
-    <section id="tab-fieldmap" class="tab-panel">
-      <p>
-        Edit the field byte/bit offsets live and re-decode without touching code. Changes persist to
-        <code>localStorage</code> for this browser only. Use "Reset to defaults" to discard edits.
+    <!-- Full Scan -->
+    <section id="tab-fullscan" class="tab-panel hidden">
+      <p class="mb-3 text-sm text-slate-400">
+        Walks every known register tag from <code class="rounded bg-black/30 px-1">assets/bleSpec.csv</code> with a read-only VarEx request and reports
+        whatever comes back — the fastest way to pull the maximum amount of information off the dongle in one pass.
+        <strong class="text-slate-200">Still zero writes</strong>: this never touches REGPROC_W/cmmdFota/phoneControl unless you explicitly opt in below, and even then only reads them.
       </p>
-      <div class="fieldmap-controls">
-        <button id="resetFieldMapBtn">Reset to defaults</button>
-        <button id="saveFieldMapBtn">Save changes</button>
+      <div class="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-edge bg-panel p-3">
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="fullScanIncludeLarge" class="h-4 w-4 rounded border-edge bg-panel2 accent-accent" /> Include large/paged regions (SMCERT, trip/stat log dumps — slow, ~1000 reads)</label>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="fullScanIncludeCaution" class="h-4 w-4 rounded border-edge bg-panel2 accent-err" /> Include write-targeted registers (read-only, handle with care — see Vehicle Info tab)</label>
       </div>
-      <textarea id="fieldMapEditor" spellcheck="false"></textarea>
+      <div class="mb-4 flex flex-wrap items-center gap-3">
+        <button id="fullScanBtn" disabled class="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 hover:brightness-110 disabled:opacity-30">Run Full Scan</button>
+        <progress id="fullScanProgress" value="0" max="1" class="hidden h-2 w-48 overflow-hidden rounded"></progress>
+        <span id="fullScanStatus" class="text-sm text-slate-400"></span>
+        <button id="fullScanExportJsonBtn" class="ml-auto rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Export JSON</button>
+        <button id="fullScanExportCsvBtn" class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Export CSV</button>
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-edge">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-panel2 text-xs uppercase tracking-wide text-slate-400">
+            <tr>
+              <th class="px-3 py-2">Tag</th>
+              <th class="px-3 py-2">Group</th>
+              <th class="px-3 py-2">Address</th>
+              <th class="px-3 py-2">Len</th>
+              <th class="px-3 py-2">Status</th>
+              <th class="px-3 py-2">Hex</th>
+              <th class="px-3 py-2">ASCII</th>
+              <th class="px-3 py-2">Description</th>
+            </tr>
+          </thead>
+          <tbody id="fullScanTableBody" class="divide-y divide-edge font-mono text-xs"></tbody>
+        </table>
+      </div>
     </section>
 
-    <section id="tab-settings" class="tab-panel">
-      <div class="settings-list">
-        <label class="settings-row">
-          <span>Units</span>
-          <select id="unitsSelect">
+    <!-- Raw Frames -->
+    <section id="tab-raw" class="tab-panel hidden">
+      <div class="mb-3 flex flex-wrap items-center gap-3">
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="pauseRaw" class="h-4 w-4 rounded border-edge bg-panel2 accent-accent" /> Pause log</label>
+        <button id="clearRawBtn" class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Clear</button>
+        <button id="exportJsonBtn" class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Export JSON</button>
+        <button id="exportCsvBtn" class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Export CSV</button>
+        <span id="frameCount" class="ml-auto text-sm text-slate-400">0 frames</span>
+      </div>
+      <div id="rawLog" class="raw-log h-[480px] overflow-y-auto rounded-xl border border-edge bg-panel font-mono text-xs"></div>
+    </section>
+
+    <!-- Field Map Editor -->
+    <section id="tab-fieldmap" class="tab-panel hidden">
+      <p class="mb-3 text-sm text-slate-400">
+        Edit the field byte/bit offsets live and re-decode without touching code. Changes persist to
+        <code class="rounded bg-black/30 px-1">localStorage</code> for this browser only. Use "Reset to defaults" to discard edits.
+      </p>
+      <div class="mb-3 flex flex-wrap gap-2">
+        <button id="resetFieldMapBtn" class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Reset to defaults</button>
+        <button id="saveFieldMapBtn" class="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-slate-950 hover:brightness-110">Save changes</button>
+      </div>
+      <textarea id="fieldMapEditor" spellcheck="false" class="h-[420px] w-full resize-y rounded-xl border border-edge bg-panel p-3 font-mono text-xs leading-relaxed"></textarea>
+    </section>
+
+    <!-- Settings -->
+    <section id="tab-settings" class="tab-panel hidden">
+      <div class="flex max-w-md flex-col gap-3">
+        <label class="flex items-center justify-between gap-3 rounded-xl border border-edge bg-panel px-4 py-3">
+          <span class="text-sm">Units</span>
+          <select id="unitsSelect" class="rounded-lg border border-edge bg-panel2 px-3 py-1.5 text-sm">
             <option value="metric">Metric (km, km/h, °C)</option>
             <option value="imperial">Imperial (mi, mph, °F)</option>
           </select>
         </label>
-        <label class="settings-row">
-          <input type="checkbox" id="alertSoundToggle" />
-          <span>Play a sound when a new alert becomes active</span>
+        <label class="flex items-center justify-between gap-3 rounded-xl border border-edge bg-panel px-4 py-3">
+          <span class="text-sm">Play a sound when a new alert becomes active</span>
+          <input type="checkbox" id="alertSoundToggle" class="h-5 w-5 rounded border-edge bg-panel2 accent-accent" />
         </label>
-        <label class="settings-row">
-          <input type="checkbox" id="autoReconnectToggle" />
-          <span>Attempt automatic reconnect on unexpected disconnect</span>
+        <label class="flex items-center justify-between gap-3 rounded-xl border border-edge bg-panel px-4 py-3">
+          <span class="text-sm">Attempt automatic reconnect on unexpected disconnect</span>
+          <input type="checkbox" id="autoReconnectToggle" class="h-5 w-5 rounded border-edge bg-panel2 accent-accent" />
         </label>
       </div>
-      <p class="muted">Settings persist to <code>localStorage</code> for this browser only.</p>
+      <p class="mt-3 text-xs text-slate-500">Settings persist to <code class="rounded bg-black/30 px-1">localStorage</code> for this browser only.</p>
     </section>
   </main>
 
-  <div id="toastContainer" aria-live="polite"></div>
+  <div id="toastContainer" aria-live="polite" class="fixed bottom-5 right-5 z-50 flex max-w-sm flex-col gap-2.5 sm:right-5"></div>
 
   <script src="js/fieldMap.js"></script>
   <script src="js/bitUtils.js"></script>

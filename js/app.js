@@ -88,10 +88,12 @@ function beep() {
 
 // ---------- Toasts (replaces blocking alert() popups) ----------
 
+const TOAST_BORDER_BY_TYPE = { info: "border-l-accent", success: "border-l-ok", warn: "border-l-warn", error: "border-l-err" };
+
 function showToast(message, type = "info", timeoutMs = 5000) {
   const container = document.getElementById("toastContainer");
   const toast = document.createElement("div");
-  toast.className = `toast ${type}`;
+  toast.className = `toast-in cursor-pointer whitespace-pre-wrap rounded-lg border border-edge ${TOAST_BORDER_BY_TYPE[type] || TOAST_BORDER_BY_TYPE.info} border-l-4 bg-panel2 p-3 text-sm leading-relaxed shadow-xl`;
   toast.textContent = message;
   toast.addEventListener("click", () => dismissToast(toast));
   container.appendChild(toast);
@@ -101,7 +103,8 @@ function showToast(message, type = "info", timeoutMs = 5000) {
 
 function dismissToast(toast) {
   if (!toast.isConnected) return;
-  toast.classList.add("closing");
+  toast.classList.remove("toast-in");
+  toast.classList.add("toast-out");
   setTimeout(() => toast.remove(), 200);
 }
 
@@ -131,13 +134,23 @@ function saveFieldMap(map) {
 
 // ---------- Tabs ----------
 
-document.querySelectorAll(".tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+const TAB_ACTIVE_CLASSES = ["border-accent", "text-accent"];
+const TAB_INACTIVE_CLASSES = ["border-transparent", "text-slate-400"];
+
+function activateTab(tabName) {
+  document.querySelectorAll(".tab-btn").forEach((b) => {
+    const isActive = b.dataset.tab === tabName;
+    b.classList.toggle("border-accent", isActive);
+    b.classList.toggle("text-accent", isActive);
+    b.classList.toggle("border-transparent", !isActive);
+    b.classList.toggle("text-slate-400", !isActive);
   });
+  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("hidden", p.id !== `tab-${tabName}`));
+  if (tabName === "history") renderHistoryIfActive();
+}
+
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => activateTab(btn.dataset.tab));
 });
 
 // ---------- Connection ----------
@@ -147,14 +160,23 @@ const debugScanBtn = document.getElementById("debugScanBtn");
 const reconnectBtn = document.getElementById("reconnectBtn");
 const disconnectBtn = document.getElementById("disconnectBtn");
 const connStatus = document.getElementById("connStatus");
-const gatedButtons = () => Array.from(document.querySelectorAll(".reg-btn, #readTrackLogPtrBtn, #readStatLogPtrBtn, #readFotaStatusBtn"));
+const gatedButtons = () =>
+  Array.from(document.querySelectorAll(".reg-btn, #readTrackLogPtrBtn, #readStatLogPtrBtn, #readFotaStatusBtn, #readSmCertBtn, #fullScanBtn"));
+
+const STATUS_STYLES = {
+  connected: "bg-emerald-950 text-ok",
+  connecting: "bg-amber-950 text-warn",
+  disconnected: "bg-red-950 text-err",
+};
 
 let hadSuccessfulConnection = false;
 
 ble.onStateChange((state, detail) => {
-  connStatus.className = `status status-${state === "connected" ? "connected" : state === "requesting" || state === "connecting" ? "connecting" : "disconnected"}`;
-  connStatus.textContent =
-    state === "connected" ? `Connected: ${detail?.name || "device"}` : state === "requesting" ? "Choosing device…" : state === "connecting" ? "Connecting…" : "Disconnected";
+  const styleKey = state === "connected" ? "connected" : state === "requesting" || state === "connecting" ? "connecting" : "disconnected";
+  connStatus.className = `inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[styleKey]}`;
+  connStatus.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-current ${styleKey === "connecting" ? "animate-pulse" : ""}"></span> ${
+    state === "connected" ? `Connected: ${detail?.name || "device"}` : state === "requesting" ? "Choosing device…" : state === "connecting" ? "Connecting…" : "Disconnected"
+  }`;
   connectBtn.disabled = state === "connected" || state === "connecting" || state === "requesting";
   disconnectBtn.disabled = state !== "connected";
   gatedButtons().forEach((b) => (b.disabled = state !== "connected"));
@@ -238,26 +260,39 @@ function applyDecodedValues(entry) {
   renderHistoryIfActive();
 }
 
+function emptyStateHtml(title, body) {
+  return `<div class="col-span-full rounded-xl border border-dashed border-edge py-12 text-center text-slate-400">
+    <strong class="mb-1.5 block text-base text-slate-200">${title}</strong>${body}
+  </div>`;
+}
+
 function renderDashboard() {
   const grid = document.getElementById("dashboardGrid");
   const entries = Object.entries(dashboardValues).filter(([name]) => !name.startsWith("Latitude") && !name.startsWith("Longitude"));
 
   if (entries.length === 0) {
-    grid.innerHTML = `<div class="empty-state"><strong>No telemetry yet</strong>Connect to your bike — this fills in as soon as notifications arrive.</div>`;
+    grid.innerHTML = emptyStateHtml("No telemetry yet", "Connect to your bike — this fills in as soon as notifications arrive.");
     return;
   }
 
   grid.innerHTML = "";
   for (const [name, data] of entries) {
     const { value, unit } = displayValue(data.value, data.unit);
-    const card = document.createElement("div");
-    card.className = "metric-card";
     const isPercent = data.unit === "%";
+    const pct = Math.min(100, Math.max(0, data.value));
+    const card = document.createElement("div");
+    card.className = "rounded-xl border border-edge bg-gradient-to-br from-panel2 to-panel p-4 transition hover:-translate-y-0.5 hover:border-accent/40";
     card.innerHTML = `
-      <div class="label">${name}</div>
-      <div class="value">${value}<span class="unit">${unit || ""}</span></div>
-      ${isPercent ? `<div class="gauge-track"><div class="gauge-fill ${data.value < 20 ? "low" : ""}" style="width:${Math.min(100, Math.max(0, data.value))}%"></div></div>` : ""}
-      ${data.note ? `<div class="note">${data.note}</div>` : ""}
+      <div class="text-xs font-semibold uppercase tracking-wide text-slate-400">${name}</div>
+      <div class="mt-1.5 font-mono text-2xl font-bold tabular-nums">${value}<span class="ml-1 text-sm font-medium text-slate-400">${unit || ""}</span></div>
+      ${
+        isPercent
+          ? `<div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-black/40"><div class="h-full rounded-full ${
+              data.value < 20 ? "bg-gradient-to-r from-err to-warn" : "bg-gradient-to-r from-accent to-ok"
+            } transition-all" style="width:${pct}%"></div></div>`
+          : ""
+      }
+      ${data.note ? `<div class="mt-2 text-xs leading-snug text-warn">${data.note}</div>` : ""}
     `;
     grid.appendChild(card);
   }
@@ -268,15 +303,22 @@ function renderAlerts() {
   const entries = Object.entries(alertValues);
 
   if (entries.length === 0) {
-    grid.innerHTML = `<div class="empty-state"><strong>No alert data yet</strong>Fault/alert flags show up here once connected.</div>`;
+    grid.innerHTML = emptyStateHtml("No alert data yet", "Fault/alert flags show up here once connected.");
     return;
   }
 
   grid.innerHTML = "";
   for (const [name, data] of entries) {
     const card = document.createElement("div");
-    card.className = `metric-card alert-card ${data.value ? "active" : ""}`;
-    card.innerHTML = `<div class="label">${name}</div><div class="value">${data.value ? "ACTIVE" : "clear"}</div>`;
+    card.className = `rounded-xl border p-4 transition ${
+      data.value ? "alert-flash border-err bg-gradient-to-br from-red-950 to-red-950/40" : "border-edge bg-gradient-to-br from-panel2 to-panel"
+    }`;
+    card.innerHTML = `
+      <div class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide ${data.value ? "text-red-200" : "text-slate-400"}">
+        <span class="h-1.5 w-1.5 rounded-full ${data.value ? "bg-err" : "bg-ok"}"></span>${name}
+      </div>
+      <div class="mt-1.5 text-base font-bold ${data.value ? "text-err" : "text-slate-500"}">${data.value ? "ACTIVE" : "clear"}</div>
+    `;
     grid.appendChild(card);
   }
 }
@@ -293,48 +335,53 @@ function renderGps() {
   document.getElementById("gpsMapLink").href = `https://www.google.com/maps?q=${latitude},${longitude}`;
 }
 
-// ---------- History (trend charts) ----------
+// ---------- History (trend charts, Chart.js, multi-field overlay) ----------
 
 const historyFieldSelect = document.getElementById("historyFieldSelect");
 const historyCanvas = document.getElementById("historyCanvas");
+const multiChart = new MultiFieldChart(historyCanvas);
 let knownHistoryFields = new Set();
+
+function selectedHistoryFields() {
+  return Array.from(historyFieldSelect.selectedOptions).map((o) => o.value);
+}
 
 function updateHistoryFieldOptions() {
   const current = new Set(history.fieldNames());
   if (current.size === knownHistoryFields.size && [...current].every((f) => knownHistoryFields.has(f))) return;
+  const previouslySelected = new Set(selectedHistoryFields());
   knownHistoryFields = current;
-  const selected = historyFieldSelect.value;
   historyFieldSelect.innerHTML = "";
   for (const name of history.fieldNames()) {
     const opt = document.createElement("option");
     opt.value = name;
     opt.textContent = name;
+    opt.selected = previouslySelected.has(name);
     historyFieldSelect.appendChild(opt);
   }
-  if (selected && current.has(selected)) historyFieldSelect.value = selected;
 }
 
 function renderHistoryIfActive() {
-  if (!document.getElementById("tab-history").classList.contains("active")) return;
-  const field = historyFieldSelect.value;
-  if (!field) return;
-  drawLineChart(historyCanvas, history.get(field), { label: field });
+  const panel = document.getElementById("tab-history");
+  if (panel.classList.contains("hidden")) return;
+  const fields = selectedHistoryFields();
+  multiChart.render(fields.map((name) => ({ name, points: history.get(name) })));
 }
 
 historyFieldSelect.addEventListener("change", renderHistoryIfActive);
-document.querySelector('.tab-btn[data-tab="history"]').addEventListener("click", renderHistoryIfActive);
 
 document.getElementById("clearHistoryBtn").addEventListener("click", () => {
   history.clear();
   knownHistoryFields = new Set();
   historyFieldSelect.innerHTML = "";
-  historyCanvas.getContext("2d").clearRect(0, 0, historyCanvas.width, historyCanvas.height);
+  multiChart.clear();
 });
 
 document.getElementById("exportHistoryBtn").addEventListener("click", () => {
-  const field = historyFieldSelect.value;
-  if (!field) return showToast("No field selected.", "warn");
-  downloadFile(history.toCsv(field), `history-${field}.csv`, "text/csv");
+  const fields = selectedHistoryFields();
+  if (fields.length === 0) return showToast("No field selected.", "warn");
+  if (fields.length > 1) showToast(`Exporting only the first selected field (${fields[0]}) — pick one at a time for CSV export.`, "info");
+  downloadFile(history.toCsv(fields[0]), `history-${fields[0]}.csv`, "text/csv");
 });
 
 // ---------- Raw frame log ----------
@@ -346,7 +393,7 @@ function recordRawFrame(entry) {
 
   const log = document.getElementById("rawLog");
   const line = document.createElement("div");
-  line.className = `frame-line ${entry.checksumOk ? "" : "bad-checksum"}`;
+  line.className = `border-b border-black/30 px-3 py-1 ${entry.checksumOk ? "even:bg-white/[0.02]" : "bg-red-950/40 text-err"}`;
   const time = new Date(entry.timestamp).toISOString().split("T")[1].replace("Z", "");
   line.textContent = `[${time}] ch${entry.charNumber} sub=${entry.subPage} ${entry.checksumOk ? "" : "BADCHK "}${entry.rawHex}`;
   log.appendChild(line);
@@ -419,15 +466,16 @@ function asciiPreview(bytes) {
 
 // ---------- Logs tab: paged dump of TRACKLOG_PTR / statlog_PTR ----------
 
-document.getElementById("readTrackLogPtrBtn").addEventListener("click", () => readPagedRegister("TRACKLOG_PTR"));
-document.getElementById("readStatLogPtrBtn").addEventListener("click", () => readPagedRegister("statlog_PTR"));
+document.getElementById("readTrackLogPtrBtn").addEventListener("click", () => readPagedRegister("TRACKLOG_PTR", "logsOutput", "pagedReadProgress"));
+document.getElementById("readStatLogPtrBtn").addEventListener("click", () => readPagedRegister("statlog_PTR", "logsOutput", "pagedReadProgress"));
+document.getElementById("readSmCertBtn").addEventListener("click", () => readPagedRegister("SMCERT", "securityOutput", "pagedReadProgress"));
 
-async function readPagedRegister(name) {
-  const output = document.getElementById("logsOutput");
-  const progress = document.getElementById("pagedReadProgress");
+async function readPagedRegister(name, outputElementId, progressElementId) {
+  const output = document.getElementById(outputElementId);
+  const progress = document.getElementById(progressElementId);
   const reg = REGISTER_MAP[name];
   output.textContent = `Reading ${name} (${reg.length} bytes, paged)…`;
-  progress.style.display = "inline-block";
+  progress.classList.remove("hidden");
   progress.max = reg.length;
   progress.value = 0;
   try {
@@ -441,7 +489,7 @@ async function readPagedRegister(name) {
   } catch (err) {
     output.textContent = `${name}: failed — ${err.message}`;
   } finally {
-    progress.style.display = "none";
+    progress.classList.add("hidden");
   }
 }
 
@@ -462,6 +510,91 @@ document.getElementById("readFotaStatusBtn").addEventListener("click", async () 
     }
   }
   output.textContent = lines.join("\n");
+});
+
+// ---------- Full Scan: read-only sweep of every known register tag ----------
+// Still zero writes: every call below goes through ble.readRegister/readRegisterPaged,
+// which only ever send a VarEx READ opcode. See fieldMap.js's REGISTER_MAP comment block
+// for the full safety reasoning, especially around the "writeTargeted" group.
+
+let lastFullScanResults = [];
+
+document.getElementById("fullScanBtn").addEventListener("click", runFullScan);
+
+async function runFullScan() {
+  const includeLarge = document.getElementById("fullScanIncludeLarge").checked;
+  const includeCaution = document.getElementById("fullScanIncludeCaution").checked;
+  const tbody = document.getElementById("fullScanTableBody");
+  const status = document.getElementById("fullScanStatus");
+  const progress = document.getElementById("fullScanProgress");
+  const scanBtn = document.getElementById("fullScanBtn");
+
+  const entries = Object.entries(REGISTER_MAP).filter(([, reg]) => {
+    if (reg.writeTargeted && !includeCaution) return false;
+    if (reg.paged && reg.length > 32 && !includeLarge) return false;
+    return true;
+  });
+
+  scanBtn.disabled = true;
+  tbody.innerHTML = "";
+  lastFullScanResults = [];
+  progress.classList.remove("hidden");
+  progress.max = entries.length;
+  progress.value = 0;
+
+  for (const [name, reg] of entries) {
+    status.textContent = `Reading ${name}… (${progress.value + 1}/${entries.length})`;
+    let result;
+    try {
+      const bytes = reg.paged
+        ? await ble.readRegisterPaged(reg.address, reg.length, { chunkSize: 16 })
+        : await ble.readRegister(reg.address, reg.length);
+      result = { name, ...reg, status: "ok", hex: toHex(bytes), ascii: asciiPreview(bytes) };
+    } catch (err) {
+      result = { name, ...reg, status: "failed", hex: "", ascii: "", error: err.message };
+    }
+    lastFullScanResults.push(result);
+    appendFullScanRow(result);
+    progress.value += 1;
+    // Small delay between reads — kinder to the BLE stack/dongle than back-to-back requests.
+    await new Promise((r) => setTimeout(r, 60));
+  }
+
+  status.textContent = `Done — ${lastFullScanResults.filter((r) => r.status === "ok").length}/${entries.length} registers read successfully.`;
+  progress.classList.add("hidden");
+  scanBtn.disabled = false;
+}
+
+function appendFullScanRow(result) {
+  const tbody = document.getElementById("fullScanTableBody");
+  const row = document.createElement("tr");
+  const isCaution = result.writeTargeted;
+  row.className = isCaution ? "bg-red-950/20" : "";
+  row.innerHTML = `
+    <td class="px-3 py-1.5 font-semibold ${isCaution ? "text-red-300" : "text-slate-200"}">${result.name}</td>
+    <td class="px-3 py-1.5 text-slate-400">${result.group}</td>
+    <td class="px-3 py-1.5 text-slate-400">0x${result.address.toString(16)}</td>
+    <td class="px-3 py-1.5 text-slate-400">${result.length}</td>
+    <td class="px-3 py-1.5 ${result.status === "ok" ? "text-ok" : "text-err"}">${result.status}${result.error ? ` (${result.error})` : ""}</td>
+    <td class="max-w-[220px] truncate px-3 py-1.5 text-slate-300" title="${result.hex}">${result.hex}</td>
+    <td class="px-3 py-1.5 text-slate-300">${result.ascii}</td>
+    <td class="max-w-[260px] px-3 py-1.5 text-slate-500">${result.description || ""}</td>
+  `;
+  tbody.appendChild(row);
+}
+
+document.getElementById("fullScanExportJsonBtn").addEventListener("click", () => {
+  if (lastFullScanResults.length === 0) return showToast("Run a scan first.", "warn");
+  downloadFile(JSON.stringify(lastFullScanResults, null, 2), "ecu-full-scan.json", "application/json");
+});
+
+document.getElementById("fullScanExportCsvBtn").addEventListener("click", () => {
+  if (lastFullScanResults.length === 0) return showToast("Run a scan first.", "warn");
+  const header = "name,group,address,length,status,hex,ascii,description\n";
+  const rows = lastFullScanResults
+    .map((r) => `${r.name},${r.group},0x${r.address.toString(16)},${r.length},${r.status},"${r.hex}","${r.ascii.replace(/"/g, '""')}","${(r.description || "").replace(/"/g, '""')}"`)
+    .join("\n");
+  downloadFile(header + rows, "ecu-full-scan.csv", "text/csv");
 });
 
 // ---------- Field map editor ----------

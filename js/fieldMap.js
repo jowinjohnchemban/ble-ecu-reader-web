@@ -107,36 +107,56 @@ const FIELD_MAP = {
   },
 };
 
-// Register/VarEx address map, transcribed from assets/bleSpec.csv — for on-demand reads
-// (VIN, serial, firmware version) via the VarEx command channel rather than the periodic
-// notify characteristics. See js/varex.js. Read-only tags only — no command/write tags
-// (REGPROC_W, cmmdFota, RemoteAction) are implemented in this tool by design.
+// Register/VarEx address map, transcribed in full from assets/bleSpec.csv — every named
+// tag the OEM app's protocol defines. See js/varex.js / js/ble.js.
+//
+// SAFETY DESIGN, read this before adding anything here: every entry below is only ever
+// used with a *read* VarEx opcode (see ble.js readRegister/readRegisterPaged) — this file
+// contains no write payloads and app.js never sends one. That holds even for the three
+// entries marked `writeTargeted: true` (REGPROC_W, cmmdFota, phoneControl) — in the OEM
+// app these addresses are where *commands* get written (register the TCU, trigger FOTA,
+// control phone-call state), but reading the current value stored there is a passive
+// query, not an action, in a normal register-style protocol. We don't have firmware
+// source to *prove* a read has zero side effects on every dongle revision, so those three
+// are flagged in the UI as "handle with care" and are excluded from the default Full Scan
+// sweep (opt-in only) — see docs/research/BLE_SECURITY_FINDINGS.md for the broader context
+// on why this protocol deserves that caution. We still never construct or send a write
+// frame to any of them, on any bike, ever, in this codebase.
 const REGISTER_MAP = {
-  CARDATA: { address: 0x287c, length: 22, group: "vehicle" },
-  SN: { address: 0x2ac4, length: 8, group: "vehicle" },
-  FW_VER: { address: 0x2acc, length: 2, group: "vehicle" },
-  MGD_MAC: { address: 0x237a, length: 7, group: "vehicle" },
-  REGPROC_R: { address: 0x2ab4, length: 2, group: "vehicle" },
+  CARDATA: { address: 0x287c, length: 22, group: "vehicle", description: "Aggregate vehicle data block" },
+  SN: { address: 0x2ac4, length: 8, group: "vehicle", description: "Dongle serial number" },
+  FW_VER: { address: 0x2acc, length: 2, group: "vehicle", description: "Dongle firmware version" },
+  MGD_MAC: { address: 0x237a, length: 7, group: "vehicle", description: "Managed/paired MAC address" },
+  REGPROC_R: { address: 0x2ab4, length: 2, group: "vehicle", description: "Registration process status (read side)" },
 
-  TRACKLOG_0: { address: 0x2ab9, length: 1, group: "logs" },
-  TRACKLOG_N: { address: 0x2ab8, length: 1, group: "logs" },
-  TRACKLOG_00: { address: 0x2267, length: 1, group: "logs" },
-  TRACKLOG_PTR: { address: 0x10800, length: 1000, group: "logs", paged: true },
-  statlog_0: { address: 0x2ad7, length: 1, group: "logs" },
-  statlog_N: { address: 0x2ad6, length: 1, group: "logs" },
-  statlog_00: { address: 0x2269, length: 1, group: "logs" },
-  statlog_PTR: { address: 0x30800, length: 1000, group: "logs", paged: true },
+  TRACKLOG_0: { address: 0x2ab9, length: 1, group: "logs", description: "Trip log: first record index" },
+  TRACKLOG_N: { address: 0x2ab8, length: 1, group: "logs", description: "Trip log: record count" },
+  TRACKLOG_00: { address: 0x2267, length: 1, group: "logs", description: "Trip log: page 0 marker" },
+  TRACKLOG_PTR: { address: 0x10800, length: 1000, group: "logs", paged: true, description: "Trip log: full paged record region (record layout unknown — raw bytes only)" },
+  statlog_0: { address: 0x2ad7, length: 1, group: "logs", description: "Stat log: first record index" },
+  statlog_N: { address: 0x2ad6, length: 1, group: "logs", description: "Stat log: record count" },
+  statlog_00: { address: 0x2269, length: 1, group: "logs", description: "Stat log: page 0 marker" },
+  statlog_PTR: { address: 0x30800, length: 1000, group: "logs", paged: true, description: "Stat log: full paged record region (record layout unknown — raw bytes only)" },
 
-  // Read-only FOTA status fields. cmmdFota (the trigger) is deliberately NOT included —
-  // see docs/skill/10-diy-ecu-reader-blueprint.md and docs/research/BLE_SECURITY_FINDINGS.md
-  // for why this tool never writes to the command channel.
-  fotaResult: { address: 0x2adc, length: 1, group: "fota" },
-  fotaState: { address: 0x3e32, length: 1, group: "fota" },
-  fotaImgA: { address: 0x2ade, length: 2, group: "fota" },
-  fotaImgB: { address: 0x2ae0, length: 2, group: "fota" },
-  fotaNewFW: { address: 0x2272, length: 2, group: "fota" },
-  phoneState: { address: 0x2aef, length: 1, group: "fota" },
-  NotifEnable: { address: 0x2276, length: 1, group: "fota" },
+  fotaResult: { address: 0x2adc, length: 1, group: "fota", description: "Last FOTA update result code" },
+  fotaState: { address: 0x3e32, length: 1, group: "fota", description: "Current FOTA state machine value" },
+  fotaImgA: { address: 0x2ade, length: 2, group: "fota", description: "FOTA image slot A version" },
+  fotaImgB: { address: 0x2ae0, length: 2, group: "fota", description: "FOTA image slot B version" },
+  fotaNewFW: { address: 0x2272, length: 2, group: "fota", description: "Available new firmware version, if any" },
+  phoneState: { address: 0x2aef, length: 1, group: "fota", description: "Phone-side connection/call state as seen by dongle" },
+  NotifEnable: { address: 0x2276, length: 1, group: "fota", description: "Notification-enable flags" },
+
+  autenticate01: { address: 0x81a, length: 16, group: "security", experimental: true, description: "Auth handshake field 1 (shape/purpose not confirmed from decompilation — see docs/BLE_PROTOCOL.md §4)" },
+  autenticate02: { address: 0x82a, length: 4, group: "security", experimental: true, description: "Auth handshake field 2 (shape/purpose not confirmed from decompilation)" },
+  SMCERT: { address: 0x2042, length: 509, group: "security", paged: true, experimental: true, description: "509-byte cert-shaped blob (X.509?) — direction/purpose not confirmed" },
+
+  // "Handle with care": these addresses are where the OEM app WRITES commands. We only ever
+  // READ them here (current stored value), never write — but that guarantee is about our
+  // code, not about how the dongle firmware reacts to an unexpected read. Excluded from the
+  // default Full Scan; read individually and watch the Raw Frames tab if you try these.
+  REGPROC_W: { address: 0x2000, length: 2, group: "writeTargeted", writeTargeted: true, description: "Registration command register (OEM app WRITEs here — we only read)" },
+  cmmdFota: { address: 0x2270, length: 1, group: "writeTargeted", writeTargeted: true, description: "FOTA trigger register (OEM app WRITEs here to start FOTA — we only read)" },
+  phoneControl: { address: 0x2274, length: 1, group: "writeTargeted", writeTargeted: true, description: "Phone-control register (OEM app WRITEs here — we only read)" },
 };
 
 if (typeof module !== "undefined") module.exports = { FIELD_MAP, REGISTER_MAP };

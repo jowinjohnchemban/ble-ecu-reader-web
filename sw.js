@@ -1,12 +1,14 @@
 // sw.js — minimal offline app-shell cache. Bluetooth obviously won't work offline; this
 // only makes the UI itself load instantly / without a network round-trip once visited.
-const CACHE_NAME = "ecu-reader-shell-v1";
+// Deliberately doesn't cache the Tailwind/Chart.js CDN scripts referenced from index.html —
+// cross-origin opaque responses are unreliable to pre-cache with cache.addAll (one failure
+// fails the whole install), and the browser's normal HTTP cache handles those fine already.
+const CACHE_NAME = "ecu-reader-shell-v2";
 const SHELL_FILES = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./icon.svg",
-  "./css/style.css",
   "./js/fieldMap.js",
   "./js/bitUtils.js",
   "./js/decoder.js",

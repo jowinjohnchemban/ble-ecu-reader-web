@@ -1,4 +1,4 @@
-// history.js — per-field time-series ring buffer + a small canvas line-chart renderer.
+// history.js — per-field time-series ring buffer + a Chart.js-backed multi-series chart.
 // Session-only (in-memory), matching the "raw frames" log — reload the page and it resets.
 // If you want persistence across reloads, export CSV from the History tab.
 
@@ -34,54 +34,76 @@ class FieldHistory {
   }
 }
 
-function drawLineChart(canvas, points, { label = "", color = "#3fa9f5" } = {}) {
-  const ctx = canvas.getContext("2d");
-  const w = canvas.width;
-  const h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
+const CHART_COLORS = ["#3fa9f5", "#2fbf71", "#f5a623", "#e5484d", "#a78bfa", "#f472b6", "#38bdf8", "#fbbf24"];
 
-  ctx.fillStyle = "#8b93a3";
-  ctx.font = "12px sans-serif";
-
-  if (points.length < 2) {
-    ctx.fillText(points.length === 0 ? "No data yet — waiting for frames…" : "Need at least 2 points…", 12, h / 2);
-    return;
+// Thin wrapper around a single Chart.js instance that supports showing several fields'
+// histories overlaid (each on its own y-axis-agnostic normalized-by-Chart.js line —
+// Chart.js handles differing scales fine via multiple lines on one linear axis; for very
+// different magnitudes, pick fields with comparable ranges for a readable overlay).
+class MultiFieldChart {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.chart = null;
   }
 
-  const values = points.map((p) => p.v);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const padding = 30;
+  render(fieldsWithPoints) {
+    // fieldsWithPoints: [{ name, points: [{t, v}] }]
+    // Uses a plain linear x-axis (seconds since the earliest visible point) rather than
+    // Chart.js's "time" scale, to avoid depending on an extra date-adapter CDN script —
+    // keeps this a no-build, minimal-dependency setup.
+    const allTimestamps = fieldsWithPoints.flatMap((f) => f.points.map((p) => p.t));
+    const t0 = allTimestamps.length ? Math.min(...allTimestamps) : 0;
 
-  // gridlines
-  ctx.strokeStyle = "#2a3140";
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const y = padding + ((h - padding * 2) * i) / 4;
-    ctx.beginPath();
-    ctx.moveTo(padding, y);
-    ctx.lineTo(w - 10, y);
-    ctx.stroke();
-    const val = max - (range * i) / 4;
-    ctx.fillText(val.toFixed(1), 2, y + 4);
+    const datasets = fieldsWithPoints.map((f, i) => ({
+      label: f.name,
+      data: f.points.map((p) => ({ x: (p.t - t0) / 1000, y: p.v })),
+      borderColor: CHART_COLORS[i % CHART_COLORS.length],
+      backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "22",
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.25,
+      fill: false,
+    }));
+
+    if (!this.chart) {
+      this.chart = new Chart(this.canvas.getContext("2d"), {
+        type: "line",
+        data: { datasets },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "nearest", intersect: false },
+          scales: {
+            x: {
+              type: "linear",
+              title: { display: true, text: "Seconds since earliest shown point", color: "#8b93a3" },
+              ticks: { color: "#8b93a3" },
+              grid: { color: "#2a3140" },
+            },
+            y: {
+              ticks: { color: "#8b93a3" },
+              grid: { color: "#2a3140" },
+            },
+          },
+          plugins: {
+            legend: { labels: { color: "#e9ecf2" } },
+            tooltip: { mode: "nearest", intersect: false },
+          },
+        },
+      });
+    } else {
+      this.chart.data.datasets = datasets;
+      this.chart.update("none");
+    }
   }
 
-  // line
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  points.forEach((p, i) => {
-    const x = padding + ((w - padding - 10) * i) / (points.length - 1);
-    const y = padding + (h - padding * 2) * (1 - (p.v - min) / range);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  ctx.fillStyle = "#e6e9ef";
-  ctx.font = "13px sans-serif";
-  ctx.fillText(`${label}  (min ${min.toFixed(1)}, max ${max.toFixed(1)}, latest ${values[values.length - 1].toFixed(1)})`, padding, 16);
+  clear() {
+    if (this.chart) {
+      this.chart.destroy();
+      this.chart = null;
+    }
+  }
 }
 
-if (typeof module !== "undefined") module.exports = { FieldHistory, drawLineChart };
+if (typeof module !== "undefined") module.exports = { FieldHistory, MultiFieldChart };
