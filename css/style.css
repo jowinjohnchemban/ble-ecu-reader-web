@@ -45,6 +45,7 @@ button {
 }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 button:hover:not(:disabled) { filter: brightness(1.1); }
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
 
 .status { padding: 4px 10px; border-radius: 12px; font-size: 0.85rem; }
 .status-disconnected { background: #3a2222; color: var(--err); }

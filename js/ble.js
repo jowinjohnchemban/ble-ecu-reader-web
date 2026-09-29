@@ -48,7 +48,14 @@ class VehicleBleConnection {
     this.stateListeners.forEach((cb) => cb(state, detail));
   }
 
-  async connect() {
+  // mode: "filtered" (default) only shows devices advertising our custom service UUID —
+  // most reliable once it works, but many BLE peripherals don't put their GATT service
+  // UUID in the advertisement packet at all, in which case this filter shows nothing
+  // even though the device is right there and connectable. mode: "debug-all" bypasses
+  // the filter entirely (shows every nearby BLE device by name) so you can find the
+  // dongle and confirm whether that's actually the problem. See README's Troubleshooting
+  // section.
+  async connect({ mode = "filtered" } = {}) {
     if (!navigator.bluetooth) {
       throw new Error(
         "Web Bluetooth isn't available. Use Chrome or Edge, over HTTPS or http://localhost, on desktop or Android."
@@ -56,16 +63,26 @@ class VehicleBleConnection {
     }
 
     this._setState("requesting");
-    this.device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [uuidFor(CHAR_CODES.service)] }],
-      optionalServices: [uuidFor(CHAR_CODES.service)],
-    });
+    const requestOptions =
+      mode === "debug-all"
+        ? { acceptAllDevices: true, optionalServices: [uuidFor(CHAR_CODES.service)] }
+        : { filters: [{ services: [uuidFor(CHAR_CODES.service)] }], optionalServices: [uuidFor(CHAR_CODES.service)] };
+    this.device = await navigator.bluetooth.requestDevice(requestOptions);
 
     this.device.addEventListener("gattserverdisconnected", () => this._setState("disconnected"));
 
     this._setState("connecting");
     this.server = await this.device.gatt.connect();
-    this.service = await this.server.getPrimaryService(uuidFor(CHAR_CODES.service));
+
+    try {
+      this.service = await this.server.getPrimaryService(uuidFor(CHAR_CODES.service));
+    } catch (err) {
+      throw new Error(
+        `Connected to "${this.device.name || "device"}" but it doesn't expose the expected vehicle service. ` +
+          `You likely picked a different nearby BLE device (debug-scan shows everything, not just the dongle). ` +
+          `Original error: ${err.message}`
+      );
+    }
 
     await this._subscribeTelemetry();
     await this._subscribeVarExAck();

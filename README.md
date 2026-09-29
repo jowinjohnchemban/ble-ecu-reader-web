@@ -46,6 +46,17 @@ Then open `http://localhost:8080` in Chrome/Edge.
 5. The **Raw Frames** tab is the ground truth: every notification, its checksum status, and hex bytes, exportable as JSON/CSV for offline analysis (Excel, Python/pandas, etc.) — this is the most reliable diagnostic tool here, and the best way to correlate a specific byte with a specific real-world event (rev the engine and watch which bytes move).
 6. The **Field Map Editor** lets you tweak byte/bit offsets live (persisted to your browser's `localStorage`) if a decoded value doesn't match reality.
 
+## Troubleshooting: bike doesn't show up in the device picker
+
+This is almost always one of these, in order of likelihood:
+
+1. **Something else already has an active BLE connection to the dongle** — most commonly the OEM Hero app, or a stale connection held by the phone's system Bluetooth stack. Most BLE peripherals **stop advertising while connected** to a central, so if the phone (via the OEM app, or via a system-level pairing) is already linked to the dongle, no scan from anywhere — this app, another phone, a laptop — will find it. Fix: force-stop the Hero OneApp (Settings → Apps → Hero OneApp → Force stop), toggle Bluetooth off/on on the phone, then try **Connect to Bike** again promptly, before the OEM app's background service reconnects.
+2. **The dongle doesn't advertise its GATT service UUID.** "Connect to Bike" filters by our known service UUID (`uuidFor("00")` in `js/ble.js`), which only matches devices that put that UUID in their advertisement packet — some peripherals only advertise a name/manufacturer data and expose services after connecting. Use the **Scan All (debug)** button instead — it shows every nearby BLE device by name (`acceptAllDevices: true`), bypassing the filter. If you spot your dongle there (usually named something like the TCU model or a generic "BLE"/"HM-1" style name) but "Connect to Bike" can't find it, this is confirmed as the cause, and matching filtered scans will need a name-prefix filter instead of a service filter (edit `js/ble.js`'s `requestOptions` once you know the exact advertised name).
+3. **(Android Chrome only) Location permission/services.** Android requires apps — including Chrome — to hold Location permission and have system Location services ON to perform any BLE scan; if either is off, `requestDevice` silently returns an empty list with no error. Check Chrome's site permissions and the phone's Location toggle.
+4. **Desktop Chrome/Edge**: confirm the machine's own Bluetooth adapter supports BLE (not just classic Bluetooth) and is turned on — Web Bluetooth uses the machine's radio, not your phone's, unless you're running Chrome on the phone itself.
+
+If "Scan All (debug)" connects but then immediately errors with "doesn't expose the expected vehicle service," you picked a different nearby BLE device (there's often more than one advertising nearby) — try again and look for the dongle specifically.
+
 ## Calibration workflow (recommended)
 
 1. Open **Raw Frames**, note the bytes for characteristic 9 while idling with a known odometer reading on the dash.

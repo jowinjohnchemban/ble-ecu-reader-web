@@ -40,6 +40,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 // ---------- Connection ----------
 
 const connectBtn = document.getElementById("connectBtn");
+const debugScanBtn = document.getElementById("debugScanBtn");
 const disconnectBtn = document.getElementById("disconnectBtn");
 const connStatus = document.getElementById("connStatus");
 const registerButtons = [
@@ -59,7 +60,19 @@ ble.onStateChange((state, detail) => {
 
 connectBtn.addEventListener("click", async () => {
   try {
-    await ble.connect();
+    await ble.connect({ mode: "filtered" });
+  } catch (err) {
+    alert(
+      `${err.message}\n\nIf the device picker showed an empty list, try "Scan All (debug)" instead — ` +
+        `many BLE dongles don't advertise their GATT service UUID, which is required for the filtered scan to find them.`
+    );
+    console.error(err);
+  }
+});
+
+debugScanBtn.addEventListener("click", async () => {
+  try {
+    await ble.connect({ mode: "debug-all" });
   } catch (err) {
     alert(err.message);
     console.error(err);
