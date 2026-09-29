@@ -1,0 +1,152 @@
+:root {
+  --bg: #0f1216;
+  --panel: #1a1f27;
+  --border: #2a3140;
+  --text: #e6e9ef;
+  --muted: #8b93a3;
+  --accent: #3fa9f5;
+  --ok: #2fbf71;
+  --warn: #f5a623;
+  --err: #e5484d;
+  font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+h1 { font-size: 1.1rem; margin: 0; }
+
+.conn-controls { display: flex; align-items: center; gap: 10px; }
+
+button {
+  background: var(--accent);
+  color: #06121c;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button:hover:not(:disabled) { filter: brightness(1.1); }
+
+.status { padding: 4px 10px; border-radius: 12px; font-size: 0.85rem; }
+.status-disconnected { background: #3a2222; color: var(--err); }
+.status-connecting { background: #3a3222; color: var(--warn); }
+.status-connected { background: #1f3a2c; color: var(--ok); }
+
+.warning-banner {
+  margin: 0;
+  padding: 10px 20px;
+  background: #2a2210;
+  color: var(--warn);
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 20px 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px 8px 0 0;
+  padding: 8px 16px;
+  font-weight: 500;
+}
+.tab-btn.active { background: var(--panel); color: var(--text); }
+
+main { padding: 20px; }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.metric-card, .gps-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.metric-card .label { color: var(--muted); font-size: 0.8rem; }
+.metric-card .value { font-size: 1.6rem; font-weight: 700; margin-top: 4px; }
+.metric-card .unit { color: var(--muted); font-size: 0.9rem; margin-left: 4px; }
+.metric-card .note { color: var(--warn); font-size: 0.7rem; margin-top: 4px; }
+
+.alert-card.active { border-color: var(--err); background: #2a1414; }
+.alert-card .value { font-size: 1.1rem; }
+
+.gps-card { margin-top: 16px; max-width: 320px; }
+.gps-card a { color: var(--accent); }
+
+.register-controls, .raw-controls, .fieldmap-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+#registerOutput {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  white-space: pre-wrap;
+  min-height: 60px;
+}
+
+.raw-log {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  height: 480px;
+  overflow-y: auto;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.8rem;
+  padding: 8px;
+}
+
+.raw-log .frame-line { padding: 2px 4px; border-bottom: 1px solid #20242c; }
+.raw-log .frame-line.bad-checksum { color: var(--err); }
+
+#fieldMapEditor {
+  width: 100%;
+  height: 420px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.8rem;
+  padding: 10px;
+}
+
+#frameCount { color: var(--muted); font-size: 0.85rem; }

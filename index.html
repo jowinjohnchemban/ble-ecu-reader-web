@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DIY ECU Reader — Vehicle BLE Telemetry</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>DIY ECU / Telematics Reader</h1>
+    <div class="conn-controls">
+      <span id="connStatus" class="status status-disconnected">Disconnected</span>
+      <button id="connectBtn">Connect to Bike</button>
+      <button id="disconnectBtn" disabled>Disconnect</button>
+    </div>
+  </header>
+
+  <p class="warning-banner">
+    Read-only telemetry tool. No vehicle command (lock/unlock/immobilize/FOTA) is implemented here — by design.
+    Many decoded values are <strong>unverified best-effort guesses</strong> — calibrate against your own dash
+    before trusting a number. See <code>README.md</code> and <code>docs/BLE_PROTOCOL.md</code>.
+  </p>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="alerts">Alerts</button>
+    <button class="tab-btn" data-tab="registers">Registers (VIN/SN/FW)</button>
+    <button class="tab-btn" data-tab="raw">Raw Frames</button>
+    <button class="tab-btn" data-tab="fieldmap">Field Map Editor</button>
+  </nav>
+
+  <main>
+    <section id="tab-dashboard" class="tab-panel active">
+      <div class="grid" id="dashboardGrid"></div>
+      <div class="gps-card">
+        <h3>GPS</h3>
+        <div id="gpsValue">—</div>
+        <a id="gpsMapLink" href="#" target="_blank" rel="noopener">Open in Maps</a>
+      </div>
+    </section>
+
+    <section id="tab-alerts" class="tab-panel">
+      <div class="grid" id="alertsGrid"></div>
+    </section>
+
+    <section id="tab-registers" class="tab-panel">
+      <p>On-demand register reads via the VarEx command channel. Experimental — see code comments in <code>js/ble.js</code>.</p>
+      <div class="register-controls">
+        <button id="readVinBtn" disabled>Read VIN (CARDATA)</button>
+        <button id="readSnBtn" disabled>Read Serial Number</button>
+        <button id="readFwBtn" disabled>Read Firmware Version</button>
+      </div>
+      <pre id="registerOutput">—</pre>
+    </section>
+
+    <section id="tab-raw" class="tab-panel">
+      <div class="raw-controls">
+        <label><input type="checkbox" id="pauseRaw" /> Pause log</label>
+        <button id="clearRawBtn">Clear</button>
+        <button id="exportJsonBtn">Export JSON</button>
+        <button id="exportCsvBtn">Export CSV</button>
+        <span id="frameCount">0 frames</span>
+      </div>
+      <div id="rawLog" class="raw-log"></div>
+    </section>
+
+    <section id="tab-fieldmap" class="tab-panel">
+      <p>
+        Edit the field byte/bit offsets live and re-decode without touching code. Changes persist to
+        <code>localStorage</code> for this browser only. Use "Reset to defaults" to discard edits.
+      </p>
+      <div class="fieldmap-controls">
+        <button id="resetFieldMapBtn">Reset to defaults</button>
+        <button id="saveFieldMapBtn">Save changes</button>
+      </div>
+      <textarea id="fieldMapEditor" spellcheck="false"></textarea>
+    </section>
+  </main>
+
+  <script src="js/fieldMap.js"></script>
+  <script src="js/bitUtils.js"></script>
+  <script src="js/decoder.js"></script>
+  <script src="js/ble.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
