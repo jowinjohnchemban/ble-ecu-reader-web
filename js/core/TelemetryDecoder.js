@@ -1,15 +1,16 @@
-// decoder.js — turns raw 20-byte BLE notifications into named values, using FIELD_MAP.
+// core/TelemetryDecoder.js — turns raw 20-byte BLE notifications into named values.
 // Also runs the frame checksum and exposes both the decoded values AND the raw bytes,
 // because for a genuinely unverified protocol, the raw log is the ground truth.
 
-class TelemetryDecoder {
+import { decodeField, toHex, simpleChecksum } from "./bitUtils.js";
+
+export class TelemetryDecoder {
   constructor(fieldMap) {
     this.fieldMap = fieldMap;
-    this.listeners = [];
   }
 
-  onFrame(cb) {
-    this.listeners.push(cb);
+  setFieldMap(fieldMap) {
+    this.fieldMap = fieldMap;
   }
 
   // charNumber: 9, 10, or 11 (matches CSV "CARACTERISTICA" numbering / char codes 09/0A/0B)
@@ -39,7 +40,7 @@ class TelemetryDecoder {
           entry.decoded[field.name] = { value: decodeField(bytes, field), unit: field.unit, note: field.note };
         }
       } else if (def.variants) {
-        // Best-effort: try every variant, pick whichever passes a plausibility check.
+        // Best-effort: try every variant, pick whichever is listed first as "the" decode.
         // This is a heuristic stand-in for the real sub-page dispatch logic we don't have.
         for (const [key, variant] of Object.entries(def.variants)) {
           const decoded = {};
@@ -57,9 +58,6 @@ class TelemetryDecoder {
       }
     }
 
-    this.listeners.forEach((cb) => cb(entry));
     return entry;
   }
 }
-
-if (typeof module !== "undefined") module.exports = { TelemetryDecoder };

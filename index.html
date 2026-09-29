@@ -2,7 +2,7 @@
 <html lang="en" class="dark">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0b0d11" />
 <title>DIY ECU Reader — Vehicle BLE Telemetry</title>
 <link rel="manifest" href="manifest.webmanifest" />
@@ -55,7 +55,7 @@
 <body class="bg-bg text-slate-100 font-sans antialiased min-h-screen">
 
   <!-- Top bar -->
-  <header class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-edge bg-panel/90 px-4 py-3 backdrop-blur sm:px-6">
+  <header id="topbar" class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-edge bg-panel/90 px-4 py-3 backdrop-blur sm:px-6">
     <h1 class="flex items-center gap-2 text-base font-semibold">
       <span aria-hidden="true">\u{1F6E0}️</span> DIY ECU / Telematics Reader
     </h1>
@@ -86,12 +86,13 @@
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="logs">Logs</button>
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="fota">FOTA Status</button>
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="fullscan">Full Scan</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="explore">Explore Device</button>
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="raw">Raw Frames</button>
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="fieldmap">Field Map Editor</button>
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="settings">Settings</button>
   </nav>
 
-  <main class="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+  <main class="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:pb-6">
 
     <!-- Dashboard -->
     <section id="tab-dashboard" class="tab-panel">
@@ -147,20 +148,27 @@
         <pre id="registerOutput" class="min-h-[60px] whitespace-pre-wrap rounded-xl border border-edge bg-panel p-3 font-mono text-sm leading-relaxed">—</pre>
       </div>
 
-      <div>
-        <h2 class="mb-1 text-sm font-semibold text-slate-200">Security / Handshake fields <span class="rounded bg-amber-900/50 px-2 py-0.5 text-xs font-normal text-warn">experimental</span></h2>
-        <p class="mb-3 text-sm text-slate-400">Shape and purpose of these fields weren't confirmed from decompilation (see <code class="rounded bg-black/30 px-1">docs/BLE_PROTOCOL.md</code> §4). Reading them is passive/non-destructive — results are just raw bytes to inspect.</p>
+      <details class="group rounded-xl border border-edge bg-panel/40 p-4">
+        <summary class="cursor-pointer list-none">
+          <h2 class="inline text-sm font-semibold text-slate-200">Security / Handshake fields <span class="rounded bg-amber-900/50 px-2 py-0.5 text-xs font-normal text-warn">experimental</span></h2>
+          <span class="ml-2 text-xs text-slate-500 group-open:hidden">click to expand</span>
+        </summary>
+        <p class="mb-3 mt-2 text-sm text-slate-400">Shape and purpose of these fields weren't confirmed from decompilation (see <code class="rounded bg-black/30 px-1">docs/BLE_PROTOCOL.md</code> §4). Reading them is passive/non-destructive — results are just raw bytes to inspect.</p>
         <div class="mb-3 flex flex-wrap gap-2">
           <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="autenticate01" data-output="securityOutput" disabled>Read autenticate01</button>
           <button class="reg-btn rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30" data-reg="autenticate02" data-output="securityOutput" disabled>Read autenticate02</button>
           <button id="readSmCertBtn" disabled class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-panel2 disabled:opacity-30">Read SMCERT (509 bytes, paged)</button>
+          <progress id="securityReadProgress" value="0" max="509" class="hidden h-2 w-48 overflow-hidden rounded"></progress>
         </div>
         <pre id="securityOutput" class="min-h-[60px] whitespace-pre-wrap rounded-xl border border-edge bg-panel p-3 font-mono text-sm leading-relaxed">—</pre>
-      </div>
+      </details>
 
-      <div>
-        <h2 class="mb-1 text-sm font-semibold text-slate-200">Write-targeted registers <span class="rounded bg-red-900/50 px-2 py-0.5 text-xs font-normal text-err">handle with care</span></h2>
-        <p class="mb-3 text-sm text-slate-400">
+      <details class="group rounded-xl border border-red-900/60 bg-red-950/10 p-4">
+        <summary class="cursor-pointer list-none">
+          <h2 class="inline text-sm font-semibold text-slate-200">Write-targeted registers <span class="rounded bg-red-900/50 px-2 py-0.5 text-xs font-normal text-err">handle with care</span></h2>
+          <span class="ml-2 text-xs text-slate-500 group-open:hidden">click to expand</span>
+        </summary>
+        <p class="mb-3 mt-2 text-sm text-slate-400">
           In the OEM app these addresses are where <em>commands</em> get written (registration, FOTA trigger, phone control). This tool only ever sends a <strong>read</strong> opcode to them — never a write — but we can't guarantee every dongle firmware treats an unexpected read as side-effect-free. Read one at a time and watch the Raw Frames tab if you try these. Excluded from Full Scan by default.
         </p>
         <div class="mb-3 flex flex-wrap gap-2">
@@ -169,7 +177,7 @@
           <button class="reg-btn rounded-lg border border-red-900 px-3 py-1.5 text-sm font-medium text-red-200 hover:bg-red-950 disabled:opacity-30" data-reg="phoneControl" data-output="cautionOutput" disabled>Read phoneControl (read-only)</button>
         </div>
         <pre id="cautionOutput" class="min-h-[60px] whitespace-pre-wrap rounded-xl border border-edge bg-panel p-3 font-mono text-sm leading-relaxed">—</pre>
-      </div>
+      </details>
     </section>
 
     <!-- Logs -->
@@ -223,8 +231,8 @@
         <button id="fullScanBtn" disabled class="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 hover:brightness-110 disabled:opacity-30">Run Full Scan</button>
         <progress id="fullScanProgress" value="0" max="1" class="hidden h-2 w-48 overflow-hidden rounded"></progress>
         <span id="fullScanStatus" class="text-sm text-slate-400"></span>
-        <button id="fullScanExportJsonBtn" class="ml-auto rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Export JSON</button>
-        <button id="fullScanExportCsvBtn" class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Export CSV</button>
+        <button id="fullScanExportJsonBtn" data-keep-enabled class="ml-auto rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Export JSON</button>
+        <button id="fullScanExportCsvBtn" data-keep-enabled class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Export CSV</button>
       </div>
       <div class="overflow-x-auto rounded-xl border border-edge">
         <table class="w-full text-left text-sm">
@@ -243,6 +251,22 @@
           <tbody id="fullScanTableBody" class="divide-y divide-edge font-mono text-xs"></tbody>
         </table>
       </div>
+    </section>
+
+    <!-- Explore Device -->
+    <section id="tab-explore" class="tab-panel hidden">
+      <p class="mb-3 text-sm text-slate-400">
+        If "Connect to Bike" or "Scan All (debug)" connects but then fails with <em>"doesn't expose the expected vehicle service"</em>,
+        your dongle is a different hardware revision than the one this app's protocol was reverse-engineered from. This tool requests
+        access to all 256 possible service codes in the same UUID family and reports back whichever ones your specific device actually
+        has — read-only GATT discovery, no data is written.
+      </p>
+      <div class="mb-4 flex flex-wrap items-center gap-3">
+        <button id="exploreBtn" class="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 hover:brightness-110">Explore Device</button>
+        <button id="exploreExportBtn" class="rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-panel2">Export JSON</button>
+        <span id="exploreStatus" class="text-sm text-slate-400"></span>
+      </div>
+      <div id="exploreOutput"></div>
     </section>
 
     <!-- Raw Frames -->
@@ -293,14 +317,24 @@
     </section>
   </main>
 
-  <div id="toastContainer" aria-live="polite" class="fixed bottom-5 right-5 z-50 flex max-w-sm flex-col gap-2.5 sm:right-5"></div>
+  <!-- Mobile bottom quick-nav: thumb-reachable access to the 4 real-time views. Hidden on sm+ where the top tab bar is already reachable. -->
+  <nav class="fixed inset-x-0 bottom-0 z-30 flex justify-around border-t border-edge bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
+    <button class="tab-btn-mobile flex flex-1 flex-col items-center gap-0.5 py-2.5 text-accent" data-tab="dashboard">
+      <span class="text-lg" aria-hidden="true">\u{1F4CA}</span><span class="text-[11px] font-medium">Dashboard</span>
+    </button>
+    <button class="tab-btn-mobile flex flex-1 flex-col items-center gap-0.5 py-2.5 text-slate-500" data-tab="gauges">
+      <span class="text-lg" aria-hidden="true">\u{1F9ED}</span><span class="text-[11px] font-medium">Gauges</span>
+    </button>
+    <button class="tab-btn-mobile flex flex-1 flex-col items-center gap-0.5 py-2.5 text-slate-500" data-tab="alerts">
+      <span class="text-lg" aria-hidden="true">⚠️</span><span class="text-[11px] font-medium">Alerts</span>
+    </button>
+    <button class="tab-btn-mobile flex flex-1 flex-col items-center gap-0.5 py-2.5 text-slate-500" data-tab="history">
+      <span class="text-lg" aria-hidden="true">\u{1F4C8}</span><span class="text-[11px] font-medium">History</span>
+    </button>
+  </nav>
 
-  <script src="js/fieldMap.js"></script>
-  <script src="js/bitUtils.js"></script>
-  <script src="js/decoder.js"></script>
-  <script src="js/ble.js"></script>
-  <script src="js/history.js"></script>
-  <script src="js/gauges.js"></script>
-  <script src="js/app.js"></script>
+  <div id="toastContainer" aria-live="polite" class="fixed bottom-20 right-4 z-50 flex max-w-[calc(100%-2rem)] flex-col gap-2.5 sm:bottom-5 sm:right-5 sm:max-w-sm"></div>
+
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

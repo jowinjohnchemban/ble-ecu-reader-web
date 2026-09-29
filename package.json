@@ -1,0 +1,11 @@
+{
+  "name": "ble-ecu-reader-web",
+  "version": "1.0.0",
+  "description": "Read-only Web Bluetooth dashboard for motorcycle telematics dongle telemetry.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "serve": "python -m http.server 8080",
+    "verify": "node scripts/verify-imports.cjs"
+  }
+}

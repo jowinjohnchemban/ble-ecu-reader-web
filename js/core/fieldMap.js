@@ -1,4 +1,4 @@
-// fieldMap.js
+// core/fieldMap.js
 // Default telemetry field map, transcribed from the OEM app's assets/bleCharacteristics.csv.
 // See ../../docs/BLE_PROTOCOL.md for the protocol writeup this is based on.
 //
@@ -12,15 +12,15 @@
 // directly. That assumption may be wrong for some fields. Use the "Raw Frames" tab to
 // compare raw bytes against known-good values (trip meter, GPS, RPM on your dash) and
 // edit this map (via the in-app Field Map Editor, persisted to localStorage) until the
-// decoded values line up. Treat every value from the "Dashboard" tab as provisional
-// until you've personally verified it against your bike.
+// decoded values line up. Treat every value from the "Dashboard"/"Gauges" tabs as
+// provisional until you've personally verified it against your bike.
 //
 // Bit-offset semantics: {byteStart, bitStart, byteEnd, bitEnd} describes an inclusive
 // bit range read MSB-first within each byte, byteStart..byteEnd. This is an assumption,
-// not a confirmed fact — flip BIT_ORDER in bitUtils.js if your readings look byte-reversed
-// or bit-reversed compared to the dash.
+// not a confirmed fact — flip BIT_ORDER in core/bitUtils.js if your readings look
+// byte-reversed or bit-reversed compared to the dash.
 
-const FIELD_MAP = {
+export const FIELD_MAP = {
   // Characteristic 0x09 — "CARACTERISTICA 09": core vehicle status
   9: {
     label: "Vehicle Status",
@@ -108,21 +108,21 @@ const FIELD_MAP = {
 };
 
 // Register/VarEx address map, transcribed in full from assets/bleSpec.csv — every named
-// tag the OEM app's protocol defines. See js/varex.js / js/ble.js.
+// tag the OEM app's protocol defines. See core/BleConnection.js.
 //
 // SAFETY DESIGN, read this before adding anything here: every entry below is only ever
-// used with a *read* VarEx opcode (see ble.js readRegister/readRegisterPaged) — this file
-// contains no write payloads and app.js never sends one. That holds even for the three
-// entries marked `writeTargeted: true` (REGPROC_W, cmmdFota, phoneControl) — in the OEM
-// app these addresses are where *commands* get written (register the TCU, trigger FOTA,
-// control phone-call state), but reading the current value stored there is a passive
-// query, not an action, in a normal register-style protocol. We don't have firmware
-// source to *prove* a read has zero side effects on every dongle revision, so those three
-// are flagged in the UI as "handle with care" and are excluded from the default Full Scan
-// sweep (opt-in only) — see docs/research/BLE_SECURITY_FINDINGS.md for the broader context
-// on why this protocol deserves that caution. We still never construct or send a write
-// frame to any of them, on any bike, ever, in this codebase.
-const REGISTER_MAP = {
+// used with a *read* VarEx opcode (see BleConnection.readRegister/readRegisterPaged) —
+// this file contains no write payloads and no caller ever sends one. That holds even for
+// the three entries marked `writeTargeted: true` (REGPROC_W, cmmdFota, phoneControl) — in
+// the OEM app these addresses are where *commands* get written (register the TCU, trigger
+// FOTA, control phone-call state), but reading the current value stored there is a passive
+// query, not an action, in a normal register-style protocol. We don't have firmware source
+// to *prove* a read has zero side effects on every dongle revision, so those three are
+// flagged in the UI as "handle with care" and are excluded from the default Full Scan sweep
+// (opt-in only) — see docs/research/BLE_SECURITY_FINDINGS.md for the broader context on why
+// this protocol deserves that caution. We still never construct or send a write frame to
+// any of them, on any bike, ever, in this codebase.
+export const REGISTER_MAP = {
   CARDATA: { address: 0x287c, length: 22, group: "vehicle", description: "Aggregate vehicle data block" },
   SN: { address: 0x2ac4, length: 8, group: "vehicle", description: "Dongle serial number" },
   FW_VER: { address: 0x2acc, length: 2, group: "vehicle", description: "Dongle firmware version" },
@@ -158,5 +158,3 @@ const REGISTER_MAP = {
   cmmdFota: { address: 0x2270, length: 1, group: "writeTargeted", writeTargeted: true, description: "FOTA trigger register (OEM app WRITEs here to start FOTA — we only read)" },
   phoneControl: { address: 0x2274, length: 1, group: "writeTargeted", writeTargeted: true, description: "Phone-control register (OEM app WRITEs here — we only read)" },
 };
-
-if (typeof module !== "undefined") module.exports = { FIELD_MAP, REGISTER_MAP };

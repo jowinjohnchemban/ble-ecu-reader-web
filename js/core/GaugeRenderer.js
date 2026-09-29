@@ -1,15 +1,16 @@
-// gauges.js — semi-circular canvas gauges (speedometer-style) for bounded sensor fields.
-// Deliberately hand-rolled on the 2D canvas API rather than another Chart.js instance per
-// gauge — a redraw here is a handful of arc() calls, cheap enough to run on every incoming
-// BLE notification, and gives full control over color zones (which is the point: seeing
-// "engine temp is in the red zone" at a glance is the whole value of a gauge over a number).
+// core/GaugeRenderer.js — semi-circular canvas gauges (speedometer-style) for bounded
+// sensor fields. Hand-rolled on the 2D canvas API rather than another Chart.js instance
+// per gauge — a redraw here is a handful of arc() calls, cheap enough to run on every
+// incoming BLE notification, and gives full control over color zones (which is the point:
+// seeing "engine temp is in the red zone" at a glance is the whole value of a gauge over
+// a plain number).
 //
 // Ranges/zones below are reasonable defaults for a typical commuter motorcycle, NOT
 // manufacturer-specified redlines for any particular model — treat the colors as a rough
 // visual aid, not a certified warning system, and adjust GAUGE_DEFS for your bike if you
 // know its actual redline/operating temp range.
 
-const GAUGE_DEFS = {
+export const GAUGE_DEFS = {
   Speed: { min: 0, max: 180, unit: "km/h", decimals: 0, zones: [{ to: 100, color: "#2fbf71" }, { to: 140, color: "#f5a623" }, { to: 180, color: "#e5484d" }] },
   EngineSpeed: { min: 0, max: 12000, unit: "RPM", decimals: 0, zones: [{ to: 7000, color: "#2fbf71" }, { to: 9500, color: "#f5a623" }, { to: 12000, color: "#e5484d" }] },
   EngineTemperature: { min: 0, max: 130, unit: "°C", decimals: 0, zones: [{ to: 90, color: "#2fbf71" }, { to: 110, color: "#f5a623" }, { to: 130, color: "#e5484d" }] },
@@ -18,7 +19,7 @@ const GAUGE_DEFS = {
   Battery: { min: 0, max: 100, unit: "%", decimals: 0, zones: [{ to: 15, color: "#e5484d" }, { to: 35, color: "#f5a623" }, { to: 100, color: "#2fbf71" }] },
 };
 
-function drawGauge(canvas, { value, def, label }) {
+export function drawGauge(canvas, { value, def, label }) {
   const ctx = canvas.getContext("2d");
   const w = canvas.width;
   const h = canvas.height;
@@ -90,5 +91,3 @@ function drawGauge(canvas, { value, def, label }) {
   ctx.textAlign = "center";
   ctx.fillText(label, cx, h - 4);
 }
-
-if (typeof module !== "undefined") module.exports = { GAUGE_DEFS, drawGauge };
