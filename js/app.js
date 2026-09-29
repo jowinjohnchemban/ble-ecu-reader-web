@@ -42,6 +42,7 @@ unitsSelect.addEventListener("change", () => {
   settings.units = unitsSelect.value;
   saveSettings();
   renderDashboard();
+  renderGauges();
 });
 alertSoundToggle.addEventListener("change", () => {
   settings.alertSound = alertSoundToggle.checked;
@@ -255,6 +256,7 @@ function applyDecodedValues(entry) {
     }
   }
   renderDashboard();
+  renderGauges();
   renderAlerts();
   renderGps();
   renderHistoryIfActive();
@@ -295,6 +297,57 @@ function renderDashboard() {
       ${data.note ? `<div class="mt-2 text-xs leading-snug text-warn">${data.note}</div>` : ""}
     `;
     grid.appendChild(card);
+  }
+}
+
+// ---------- Gauges (speedometer-style dials for bounded sensor fields) ----------
+
+let gaugeCanvases = {}; // field name -> <canvas>, kept across renders so we redraw in place
+
+function renderGauges() {
+  const grid = document.getElementById("gaugesGrid");
+  const available = Object.keys(GAUGE_DEFS).filter((name) => dashboardValues[name] !== undefined);
+
+  if (available.length === 0) {
+    if (Object.keys(gaugeCanvases).length > 0 || grid.children.length === 0) {
+      grid.innerHTML = emptyStateHtml("No gauge-ready sensors yet", "Speed, RPM, engine temp, throttle, fuel, and battery show up here once connected.");
+      gaugeCanvases = {};
+    }
+    return;
+  }
+
+  if (Object.keys(gaugeCanvases).length === 0) grid.innerHTML = "";
+
+  for (const name of available) {
+    let canvas = gaugeCanvases[name];
+    if (!canvas) {
+      const card = document.createElement("div");
+      card.className = "flex justify-center rounded-xl border border-edge bg-panel p-3";
+      canvas = document.createElement("canvas");
+      canvas.width = 260;
+      canvas.height = 170;
+      canvas.className = "max-w-full";
+      card.appendChild(canvas);
+      grid.appendChild(card);
+      gaugeCanvases[name] = canvas;
+    }
+
+    const def = GAUGE_DEFS[name];
+    const raw = dashboardValues[name].value;
+    const { value: displayVal, unit: displayUnit } = displayValue(raw, def.unit);
+
+    let displayDef = def;
+    if (displayUnit !== def.unit) {
+      displayDef = {
+        ...def,
+        min: displayValue(def.min, def.unit).value,
+        max: displayValue(def.max, def.unit).value,
+        unit: displayUnit,
+        zones: def.zones.map((z) => ({ ...z, to: displayValue(z.to, def.unit).value })),
+      };
+    }
+
+    drawGauge(canvas, { value: displayVal, def: displayDef, label: name });
   }
 }
 

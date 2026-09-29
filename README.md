@@ -48,7 +48,8 @@ Then open `http://localhost:8080` in Chrome/Edge.
 
 1. Click **Connect to Bike**, pick your dongle from the browser's device picker. Use **Reconnect** afterwards to relink without re-picking it (works until the browser tab closes).
 2. **Dashboard** — live telemetry, with gauge bars on percentage fields (battery/fuel/throttle). Toggle units (metric/imperial) in **Settings**.
-3. **Alerts** — every boolean fault/alert flag (side-stand, roll-over, theft, panic, accident, fall-down, speeding, fuel-theft, battery-removal), flashing red when active. Enable "alert sound" in **Settings** to get an audible beep the moment one flips on.
+3. **Gauges** — speedometer-style dials (with color zones) for speed, RPM, engine temp, throttle, fuel, and battery — appear automatically once those fields start decoding. The zone colors are reasonable defaults for a typical commuter motorcycle, not a certified redline for your specific bike; adjust `GAUGE_DEFS` in `js/gauges.js` if you know your bike's actual limits.
+4. **Alerts** — every boolean fault/alert flag (side-stand, roll-over, theft, panic, accident, fall-down, speeding, fuel-theft, battery-removal), flashing red when active. Enable "alert sound" in **Settings** to get an audible beep the moment one flips on.
 4. **History** — select one or more numeric fields (Ctrl/Cmd-click) for an overlaid live trend chart of this session's readings, exportable as CSV.
 5. **Vehicle Info** — on-demand reads of VIN, serial number, firmware version, dongle MAC, and registration status, plus two extra sections:
    - **Security/Handshake fields** (experimental) — reads of `autenticate01`/`autenticate02`/`SMCERT`, whose real shape/purpose wasn't recoverable from decompilation; these are just raw-byte dumps for you to inspect.

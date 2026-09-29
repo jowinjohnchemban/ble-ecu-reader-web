@@ -79,6 +79,7 @@
   <!-- Tabs -->
   <nav id="tabBar" class="sticky top-[61px] z-10 flex gap-1 overflow-x-auto border-b border-edge bg-bg px-2 sm:px-4">
     <button class="tab-btn whitespace-nowrap border-b-2 border-accent px-4 py-3 text-sm font-medium text-accent" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="gauges">Gauges</button>
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="alerts">Alerts</button>
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="history">History</button>
     <button class="tab-btn whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-400 hover:text-slate-100" data-tab="vehicle">Vehicle Info</button>
@@ -100,6 +101,16 @@
         <div id="gpsValue" class="mb-2 font-mono text-lg tabular-nums">—</div>
         <a id="gpsMapLink" href="#" target="_blank" rel="noopener" class="text-sm font-semibold text-accent hover:underline">Open in Maps</a>
       </div>
+    </section>
+
+    <!-- Gauges -->
+    <section id="tab-gauges" class="tab-panel hidden">
+      <p class="mb-3 text-sm text-slate-400">
+        Speedometer-style dials for bounded sensor fields (speed, RPM, engine temp, throttle, fuel, battery). Color zones are
+        reasonable defaults for a typical commuter motorcycle, <strong class="text-slate-200">not</strong> a certified warning
+        system for your specific bike — see <code class="rounded bg-black/30 px-1">js/gauges.js</code> to tune them.
+      </p>
+      <div id="gaugesGrid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
     </section>
 
     <!-- Alerts -->
@@ -289,6 +300,7 @@
   <script src="js/decoder.js"></script>
   <script src="js/ble.js"></script>
   <script src="js/history.js"></script>
+  <script src="js/gauges.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
