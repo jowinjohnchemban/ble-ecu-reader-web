@@ -18,6 +18,14 @@ Built from the protocol reverse-engineered in [`../docs/BLE_PROTOCOL.md`](../doc
 
 ## Running it
 
+### Option A — GitHub Pages (auto-deployed)
+
+Push this repo to GitHub, then in **Settings → Pages**, set **Source** to **GitHub Actions** (one-time setup). The included workflow (`.github/workflows/deploy-pages.yml`) publishes the site on every push to `main`, at `https://<your-username>.github.io/<repo-name>/`.
+
+GitHub Pages serves over HTTPS, which satisfies Web Bluetooth's secure-context requirement — no local server needed once deployed. Note: pair/connect from a device that's actually near your bike (a phone or laptop with Bluetooth), not from GitHub's own servers, which obviously can't reach your dongle.
+
+### Option B — Run locally
+
 From this folder:
 
 ```bash
