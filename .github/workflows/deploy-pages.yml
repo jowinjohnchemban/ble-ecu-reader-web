@@ -24,10 +24,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Stage site files
+        run: |
+          mkdir -p _site/js
+          cp index.html icon.svg manifest.webmanifest sw.js _site/
+          cp -r js/. _site/js/
+          touch _site/.nojekyll
+
       - name: Upload site as Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment
